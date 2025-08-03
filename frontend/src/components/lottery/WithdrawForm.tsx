@@ -113,7 +113,7 @@ export const WithdrawForm: React.FC = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-300">
-                  Amount to Withdraw (wHYPE)
+                  Amount to Withdraw (HYPE)
                 </label>
                 <div className="relative">
                   <Input
