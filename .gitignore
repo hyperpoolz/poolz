@@ -1,0 +1,25 @@
+# Hardhat files
+cache
+artifacts
+.env
+
+# Dependencies
+node_modules
+
+# Build files
+dist
+build
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI
+.claude
+.crush
+
+frontend/node_modules
