@@ -31,7 +31,7 @@ export const DepositForm: React.FC = () => {
       setIsDepositing(true);
       const result = await deposit(amount);
       
-      if (result) {
+      if (result !== undefined) {
         toast.success(`Deposit of ${amount} wHYPE submitted!`);
         setAmount('');
         // Refetch contract data after deposit
