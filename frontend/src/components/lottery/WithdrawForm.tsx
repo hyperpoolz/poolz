@@ -30,8 +30,8 @@ export const WithdrawForm: React.FC = () => {
       setIsWithdrawing(true);
       const result = await withdraw(amount);
       
-      if (result) {
-        toast.success(`Withdrawal of ${amount} wHYPE submitted!`);
+      if (result !== undefined) {
+        toast.success(`Withdrawal of ${amount} HYPE submitted!`);
         setAmount('');
         // Refetch contract data after withdrawal
         setTimeout(() => refetchAll(), 2000);
@@ -133,7 +133,7 @@ export const WithdrawForm: React.FC = () => {
                     color="danger"
                     variant="flat"
                     className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
-                    onClick={handleMaxClick}
+                    onPress={handleMaxClick}
                   >
                     MAX
                   </Button>
@@ -144,7 +144,7 @@ export const WithdrawForm: React.FC = () => {
                 size="lg"
                 color="danger"
                 className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
-                onClick={handleWithdraw}
+                onPress={handleWithdraw}
                 isLoading={isWithdrawing || isLoading}
                 isDisabled={!amount || Number(amount) <= 0 || Number(amount) > Number(formatters.userDeposit)}
               >

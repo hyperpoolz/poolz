@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { Card, CardBody, Button, Input, Divider, Chip } from '@nextui-org/react';
 import { ArrowDownCircle, Wallet, TrendingUp, AlertCircle } from 'lucide-react';
 import { useAccount, useBalance } from 'wagmi';
-import { parseEther, formatEther } from 'viem';
+import { formatEther } from 'viem';
 import { useContract } from '../../hooks/useContract';
 import toast from 'react-hot-toast';
 
@@ -13,7 +13,7 @@ export const DepositForm: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
   const { address, isConnected } = useAccount();
-  const { deposit, isLoading, contractAddress, refetchAll } = useContract();
+  const { deposit, isLoading, refetchAll } = useContract();
 
   // Get user's wHYPE balance (for demo, we'll use ETH balance)
   const { data: balance } = useBalance({
@@ -32,7 +32,7 @@ export const DepositForm: React.FC = () => {
       const result = await deposit(amount);
       
       if (result !== undefined) {
-        toast.success(`Deposit of ${amount} wHYPE submitted!`);
+        toast.success(`Deposit of ${amount} HYPE submitted!`);
         setAmount('');
         // Refetch contract data after deposit
         setTimeout(() => refetchAll(), 2000);
@@ -131,7 +131,7 @@ export const DepositForm: React.FC = () => {
                     color="primary"
                     variant="flat"
                     className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
-                    onClick={handleMaxClick}
+                    onPress={handleMaxClick}
                   >
                     MAX
                   </Button>
@@ -142,7 +142,7 @@ export const DepositForm: React.FC = () => {
                 size="lg"
                 color="primary"
                 className="w-full bg-gradient-to-r from-hyperliquid-accent to-hyperliquid-accent/80 hover:from-hyperliquid-accent/90 hover:to-hyperliquid-accent/70 text-hyperliquid-dark font-semibold"
-                onClick={handleDeposit}
+                onPress={handleDeposit}
                 isLoading={isDepositing || isLoading}
                 isDisabled={!amount || Number(amount) <= 0}
               >
