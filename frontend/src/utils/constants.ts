@@ -5,7 +5,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
   hyperEVM: {
     chainId: 999,
     name: 'Hyperliquid EVM',
-    rpcUrl: 'https://api.hyperliquid.xyz/evm',
+    rpcUrl: process.env.NEXT_PUBLIC_MAINNET_RPC_URL || 'https://hyperliquid.drpc.org',
     blockExplorer: 'https://explorer.hyperliquid.xyz',
     nativeCurrency: {
       name: 'HYPE',
@@ -16,7 +16,7 @@ export const NETWORKS: Record<string, NetworkConfig> = {
   hyperEVMTestnet: {
     chainId: 998,
     name: 'Hyperliquid EVM Testnet',
-    rpcUrl: 'https://api.hyperliquid-testnet.xyz/evm',
+    rpcUrl: process.env.NEXT_PUBLIC_TESTNET_RPC_URL || 'https://rpc.hyperliquid-testnet.xyz/evm',
     blockExplorer: 'https://explorer.hyperliquid-testnet.xyz',
     nativeCurrency: {
       name: 'HYPE',
@@ -32,13 +32,14 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
     hyperLendPool: '0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b',
     dataProvider: '0x5481bf8d3946E6A3168640c1D7523eB59F055a29',
     wHYPE: '0x5555555555555555555555555555555555555555',
-    noLossLottery: process.env.NEXT_PUBLIC_LOTTERY_CONTRACT_MAINNET || '',
+    noLossLottery: process.env.NEXT_PUBLIC_LOTTERY_CONTRACT_MAINNET || '0x326F90a5be2A4BA0e51A2212AaD7b4301Fe5bC22',
   },
   998: { // Testnet
     hyperLendPool: '0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b',
     dataProvider: '0x5481bf8d3946E6A3168640c1D7523eB59F055a29',
     wHYPE: '0x5555555555555555555555555555555555555555',
-    noLossLottery: process.env.NEXT_PUBLIC_LOTTERY_CONTRACT_TESTNET || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    // Not deployed on testnet by default
+    noLossLottery: process.env.NEXT_PUBLIC_LOTTERY_CONTRACT_TESTNET || '',
   },
   31337: { // Local Hardhat
     hyperLendPool: '0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b',
@@ -133,7 +134,8 @@ export const DEMO_DATA = {
 
 // Feature flags for development
 export const FEATURE_FLAGS = {
-  showDemoData: process.env.NODE_ENV === 'development',
+  // Explicit flag to show demo data. Defaults to false to avoid masking real on-chain stats.
+  showDemoData: (process.env.NEXT_PUBLIC_UI_USE_DEMO || '').toLowerCase() === 'true',
   enableAdvancedCharts: true,
   enableNotifications: true,
   enableSoundEffects: false,

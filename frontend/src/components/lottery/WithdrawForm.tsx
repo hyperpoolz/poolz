@@ -115,27 +115,25 @@ export const WithdrawForm: React.FC = () => {
                 <label className="text-sm font-medium text-gray-300">
                   Amount to Withdraw (HYPE)
                 </label>
-                <div className="relative">
-                  <Input
-                    type="number"
-                    placeholder="0.00"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    max={formatters.userDeposit}
-                    className="pr-16"
-                    classNames={{
-                      input: "text-right font-mono text-lg",
-                      inputWrapper: "glass-morphism",
-                    }}
-                  />
-                  <Button
-                    size="sm"
-                    className="hyperlend-button absolute right-2 top-1/2 -translate-y-1/2 h-8"
-                    onPress={handleMaxClick}
-                  >
-                    MAX
-                  </Button>
-                </div>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  min={0}
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  max={formatters.userDeposit}
+                  endContent={
+                    <Button size="sm" className="hyperlend-button h-8" onPress={handleMaxClick} type="button">
+                      MAX
+                    </Button>
+                  }
+                  classNames={{
+                    input: "text-right font-mono text-lg",
+                    inputWrapper: "glass-morphism",
+                  }}
+                />
               </div>
 
               <Button

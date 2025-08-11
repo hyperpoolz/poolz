@@ -83,7 +83,7 @@ export const ContractStatus: React.FC = () => {
                   </p>
                 </div>
               </div>
-              {contractAddress && (
+               {contractAddress && (
                 <Button
                   size="sm"
                   variant="ghost"

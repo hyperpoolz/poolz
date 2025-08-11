@@ -1,0 +1,11 @@
+{
+  "network": "hyperevm_mainnet",
+  "contractAddress": "0x326F90a5be2A4BA0e51A2212AaD7b4301Fe5bC22",
+  "deployerAddress": "0xB0e83Be114b698dF6DB62cCAD8c2b2F3eb83bCBB",
+  "transactionHash": "0x982c4dbbe3f58b4a29fab4211e150519018ccc63fe394f814a0ff9c102d76c62",
+  "blockNumber": 10745723,
+  "timestamp": "2025-08-10T10:19:35.415Z",
+  "hyperLendPool": "0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b",
+  "dataProvider": "0x5481bf8d3946E6A3168640c1D7523eB59F055a29",
+  "depositToken": "0x5555555555555555555555555555555555555555"
+}

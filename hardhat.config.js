@@ -28,22 +28,23 @@ module.exports = {
     },
   },
   etherscan: {
-    // Add HyperEVM explorer configuration if available
+    // Use single API key per new Etherscan plugin guidance; supports custom chains
+    apiKey: process.env.ETHERSCAN_API_KEY || process.env.HYPEREVMSCAN_API_KEY || '',
     customChains: [
       {
         network: "hyperevm_testnet",
         chainId: 998,
         urls: {
-          apiURL: "https://api.hyperliquid-testnet.xyz/evm",
-          browserURL: "https://hyperliquid-testnet.xyz"
+          apiURL: "https://api-testnet.hyperevmscan.io/api",
+          browserURL: "https://testnet.hyperevmscan.io"
         }
       },
       {
         network: "hyperevm_mainnet",
         chainId: 999,
         urls: {
-          apiURL: "https://api.hyperliquid.xyz/evm",
-          browserURL: "https://hyperliquid.xyz"
+          apiURL: "https://api.hyperevmscan.io/api",
+          browserURL: "https://hyperevmscan.io"
         }
       }
     ]
