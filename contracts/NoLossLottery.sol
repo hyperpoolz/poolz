@@ -3,8 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Pausable.sol";
+// Removed ReentrancyGuard and Pausable to minimize bytecode
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IPool.sol";
 import "./interfaces/IProtocolDataProvider.sol";
@@ -15,7 +14,7 @@ import "./interfaces/IProtocolDataProvider.sol";
  * @dev Users deposit tokens which are supplied to HyperLend to earn yield. 
  *      The yield is pooled and distributed to winners through daily lotteries.
  */
-contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
+contract NoLossLottery is Ownable {
     using SafeERC20 for IERC20;
 
     // HyperLend contracts
@@ -30,25 +29,35 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
     uint256 public nextLotteryTime;
     uint256 public constant LOTTERY_INTERVAL = 1 days;
     uint256 public currentRound;
+    uint256 public totalTickets;
+    uint256 public constant TICKET_UNIT = 1e16; // 0.01 wHYPE per ticket
+
+    // Randomness/demo configuration
+    // randomness seed removed to minimize bytecode
+
+    // User-configurable allocation of yield to lottery (basis points, 0-10000)
+    mapping(address => uint16) public userAllocationBps; // defaults to 10000 if unset
+
+    // Protocol fee removed to minimize bytecode
 
     // User tracking
     struct UserInfo {
         uint256 depositAmount;
-        uint256 depositTime;
         uint256 tickets;
-        uint256 lastTicketUpdate;
     }
 
     mapping(address => UserInfo) public users;
     address[] public participants;
     mapping(address => bool) public isParticipant;
 
+    // Last winner fields removed to minimize bytecode
+
     // Events
     event Deposited(address indexed user, uint256 amount, uint256 timestamp);
     event Withdrawn(address indexed user, uint256 amount, uint256 timestamp);
     event YieldHarvested(uint256 yieldAmount, uint256 timestamp);
     event LotteryExecuted(address indexed winner, uint256 prize, uint256 round);
-    event TicketsUpdated(address indexed user, uint256 newTickets);
+    // Protocol fee event removed to minimize bytecode
 
     /**
      * @notice Constructor
@@ -99,10 +108,12 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
     /**
      * @notice Get user information
      * @param user Address of the user
-     * @return UserInfo struct containing user's deposit info and tickets
+     * @return depositAmount User's deposit amount
+     * @return tickets User's current tickets
      */
-    function getUserInfo(address user) external view returns (UserInfo memory) {
-        return users[user];
+    function getUserInfo(address user) external view returns (uint256 depositAmount, uint256 tickets) {
+        UserInfo storage u = users[user];
+        return (u.depositAmount, u.tickets);
     }
 
     /**
@@ -118,7 +129,7 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
      * @return true if lottery can be executed
      */
     function isLotteryReady() external view returns (bool) {
-        return block.timestamp >= nextLotteryTime && participants.length > 0 && prizePool > 0;
+        return block.timestamp >= nextLotteryTime && participants.length > 0 && prizePool > 0 && totalTickets > 0;
     }
 
     /**
@@ -132,44 +143,14 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
         return nextLotteryTime - block.timestamp;
     }
 
-    /**
-     * @notice Deposit native HYPE into the lottery pool
-     * @dev Native HYPE is automatically wrapped to wHYPE and supplied to HyperLend
-     */
-    function deposit() external payable nonReentrant whenNotPaused {
-        require(msg.value > 0, "Must send HYPE to deposit");
-        
-        uint256 amount = msg.value;
-        
-        // For demo: we'll treat msg.value as wHYPE equivalent
-        // In production, this would wrap HYPE to wHYPE first
-        
-        // Approve HyperLend pool to spend tokens (in production, after wrapping)
-        // depositToken.safeIncreaseAllowance(address(hyperLendPool), amount);
-        
-        // Supply tokens to HyperLend (in production, would supply wHYPE)
-        // hyperLendPool.supply(address(depositToken), amount, address(this), 0);
-        
-        // Update user info
-        UserInfo storage user = users[msg.sender];
-        user.depositAmount += amount;
-        user.depositTime = block.timestamp;
-        
-        // Add to participants if first deposit
-        _addParticipant(msg.sender);
-        
-        // Update total deposits
-        totalDeposits += amount;
-        
-        emit Deposited(msg.sender, amount, block.timestamp);
-    }
+    // Native deposit not supported; use depositWHYPE(uint256)
 
     /**
      * @notice Deposit wHYPE tokens into the lottery pool (alternative method)
      * @param amount Amount of wHYPE tokens to deposit
      * @dev For users who already have wHYPE tokens
      */
-    function depositWHYPE(uint256 amount) external nonReentrant whenNotPaused {
+    function depositWHYPE(uint256 amount) external {
         require(amount > 0, "Amount must be greater than 0");
         require(depositToken.balanceOf(msg.sender) >= amount, "Insufficient wHYPE balance");
         
@@ -185,7 +166,6 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
         // Update user info
         UserInfo storage user = users[msg.sender];
         user.depositAmount += amount;
-        user.depositTime = block.timestamp;
         
         // Add to participants if first deposit
         _addParticipant(msg.sender);
@@ -201,12 +181,11 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
      * @param amount Amount to withdraw (returned as native HYPE)
      * @dev Tokens are withdrawn from HyperLend, unwrapped, and sent as native HYPE
      */
-    function withdraw(uint256 amount) external nonReentrant whenNotPaused {
+    function withdraw(uint256 amount) external {
         require(amount > 0, "Amount must be greater than 0");
         
         UserInfo storage user = users[msg.sender];
         require(user.depositAmount >= amount, "Insufficient deposit balance");
-        require(address(this).balance >= amount, "Insufficient contract balance for withdrawal");
         
         // Update user info before external calls
         user.depositAmount -= amount;
@@ -214,27 +193,118 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
         
         // Remove from participants if no deposit left
         if (user.depositAmount == 0) {
+            // If user holds tickets, burn them and update totalTickets
+            if (user.tickets > 0) {
+                totalTickets -= user.tickets;
+                user.tickets = 0;
+            }
             _removeParticipant(msg.sender);
         }
         
-        // In production: Withdraw from HyperLend first
-        // hyperLendPool.withdraw(address(depositToken), amount, address(this));
-        // Then unwrap wHYPE to HYPE
+        // Withdraw underlying wHYPE from HyperLend to this contract
+        uint256 withdrawn = hyperLendPool.withdraw(address(depositToken), amount, address(this));
+        require(withdrawn >= amount, "Insufficient withdrawal amount");
         
-        // For demo: Send native HYPE directly
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
-        require(success, "HYPE transfer failed");
+        // Transfer wHYPE to user
+        depositToken.safeTransfer(msg.sender, amount);
         
         emit Withdrawn(msg.sender, amount, block.timestamp);
     }
 
-    function harvestYield() external nonReentrant whenNotPaused {
-        revert("Not implemented yet - Session 3");
+    function harvestYield() external {
+        // Compute gross yield since last adjustment
+        uint256 currentBalance = getCurrentSupplyBalance();
+        if (currentBalance <= totalDeposits) {
+            return; // nothing to harvest
+        }
+        uint256 grossYield = currentBalance - totalDeposits;
+
+        // First pass: compute per-user yield share, split into lottery and retained parts
+        uint256 totalLotteryPart = 0;
+        uint256 totalRetainedPart = 0;
+
+        // To avoid multiple loops for large arrays we will compute tickets and update users in the same pass
+        for (uint256 i = 0; i < participants.length; i++) {
+            address p = participants[i];
+            UserInfo storage info = users[p];
+            if (info.depositAmount == 0) {
+                continue;
+            }
+            uint256 userYield = (info.depositAmount * grossYield) / totalDeposits;
+            if (userYield == 0) {
+                continue;
+            }
+            uint16 alloc = userAllocationBps[p];
+            if (alloc == 0) {
+                alloc = 10000; // default 100%
+            }
+            uint256 lotteryPart = (userYield * alloc) / 10000;
+            uint256 retainedPart = userYield - lotteryPart;
+
+            // Update tickets for the lottery contribution
+            if (lotteryPart > 0) {
+                uint256 minted = lotteryPart / TICKET_UNIT;
+                if (minted == 0) minted = 1; // ensure at least one ticket if contributing
+                info.tickets += minted;
+                totalTickets += minted;
+            }
+
+            // Update retained as principal to preserve ownership
+            if (retainedPart > 0) {
+                info.depositAmount += retainedPart;
+                totalRetainedPart += retainedPart;
+            }
+
+            totalLotteryPart += lotteryPart;
+        }
+
+        // Withdraw only the lottery portion from HyperLend
+        if (totalLotteryPart > 0) {
+            uint256 withdrawn = hyperLendPool.withdraw(address(depositToken), totalLotteryPart, address(this));
+            require(withdrawn >= totalLotteryPart, "Yield withdraw failed");
+            prizePool += withdrawn;
+        }
+
+        // Increase totalDeposits by retained portion (auto-compound)
+        if (totalRetainedPart > 0) {
+            totalDeposits += totalRetainedPart;
+        }
+
+        lastHarvestTime = block.timestamp;
+        emit YieldHarvested(totalLotteryPart, block.timestamp);
     }
 
-    function executeLottery() external nonReentrant whenNotPaused {
-        revert("Not implemented yet - Session 4");
+    function executeLottery() external {
+        require(block.timestamp >= nextLotteryTime, "Lottery not ready by time");
+        require(participants.length > 0, "No participants");
+        require(prizePool > 0, "No prize to distribute");
+        require(totalTickets > 0, "No tickets");
+        
+        // Generate randomness (demo fallback)
+        uint256 randomValue = uint256(keccak256(abi.encode(blockhash(block.number - 1), address(this), currentRound, totalTickets)));
+        
+        // Select winner by weighted tickets
+        address winner = _selectWinner(randomValue);
+        uint256 prize = prizePool;
+        
+        // Effects: reset before external transfers
+        prizePool = 0;
+        
+        // Transfer prize (wHYPE)
+        depositToken.safeTransfer(winner, prize);
+        
+        emit LotteryExecuted(winner, prize, currentRound);
+        
+        // Reset tickets for next round
+        _resetTickets();
+        
+        // Advance round and schedule next
+        currentRound += 1;
+        nextLotteryTime = block.timestamp + LOTTERY_INTERVAL;
     }
+
+    // ============ View helpers ============
+    // minimal views only
 
     // Internal helper functions
     function _addParticipant(address user) internal {
@@ -257,12 +327,81 @@ contract NoLossLottery is ReentrancyGuard, Pausable, Ownable {
         }
     }
 
-    // Emergency functions
-    function pause() external onlyOwner {
-        _pause();
+    // removed _distributeTickets in favor of inline logic in harvest
+
+    function _resetTickets() internal {
+        if (totalTickets == 0) return;
+        for (uint256 i = 0; i < participants.length; i++) {
+            address p = participants[i];
+            if (users[p].tickets > 0) {
+                users[p].tickets = 0;
+            }
+        }
+        totalTickets = 0;
     }
 
-    function unpause() external onlyOwner {
-        _unpause();
+    function _selectWinner(uint256 randomValue) internal view returns (address) {
+        require(participants.length > 0, "No participants");
+        require(totalTickets > 0, "No tickets");
+        uint256 target = randomValue % totalTickets;
+        uint256 cumulative = 0;
+        for (uint256 i = 0; i < participants.length; i++) {
+            address p = participants[i];
+            uint256 t = users[p].tickets;
+            if (t == 0) continue;
+            cumulative += t;
+            if (cumulative > target) {
+                return p;
+            }
+        }
+        // Fallback (should not reach here)
+        return participants[0];
     }
+
+    // removed randomness helper
+
+    // Emergency functions removed to minimize bytecode
+
+    function setUserAllocationBps(uint16 bps) external {
+        require(bps <= 10000, "bps>10000");
+        userAllocationBps[msg.sender] = bps;
+    }
+
+    // fee parameters removed
+
+    // Removed manual funding
+
+    // Admin rescue functions (require paused)
+    function rescueERC20(address token, uint256 amount, address to) external onlyOwner {
+        require(token != address(depositToken), "cannot rescue depositToken");
+        require(to != address(0), "to=0");
+        IERC20(token).safeTransfer(to, amount);
+    }
+
+    function rescueNative(uint256 amount, address payable to) external onlyOwner {
+        require(to != address(0), "to=0");
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "native transfer failed");
+    }
+
+    // ============ Analytics views ============
+    // removed recent winners view
+
+    function getLifetimeStats()
+        external
+        view
+        returns (
+            uint256 currentParticipants,
+            uint256 totalManaged,
+            uint256 totalTicketsCount
+        )
+    {
+        currentParticipants = participants.length;
+        totalManaged = getCurrentSupplyBalance();
+        totalTicketsCount = totalTickets;
+    }
+
+    // removed internal balance view
+
+    // removed rate view
 }

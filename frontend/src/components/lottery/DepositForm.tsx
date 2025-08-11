@@ -4,21 +4,45 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardBody, Button, Input, Divider, Chip } from '@nextui-org/react';
 import { ArrowDownCircle, Wallet, TrendingUp, AlertCircle } from 'lucide-react';
-import { useAccount, useBalance } from 'wagmi';
-import { formatEther } from 'viem';
+import { useAccount, useReadContract } from 'wagmi';
+import { formatUnits, parseUnits } from 'viem';
 import { useContract } from '../../hooks/useContract';
 import toast from 'react-hot-toast';
+import { CONTRACT_ADDRESSES } from '../../utils/constants';
+
+const ERC20_ABI = [
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+] as const;
 
 export const DepositForm: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [isDepositing, setIsDepositing] = useState(false);
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId } = useAccount();
   const { deposit, isLoading, refetchAll } = useContract();
 
-  // Get user's wHYPE balance (for demo, we'll use ETH balance)
-  const { data: balance } = useBalance({
-    address: address,
-    // For demo purposes, we'll show ETH balance instead of wHYPE
+  const tokenAddress = chainId ? CONTRACT_ADDRESSES[chainId!]?.wHYPE : undefined;
+
+  // ERC20 metadata and balance
+  const { data: decimals = 18 } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'decimals',
+    query: { enabled: !!tokenAddress },
+  });
+  const { data: symbol = 'wHYPE' } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'symbol',
+    query: { enabled: !!tokenAddress },
+  });
+  const { data: balanceRaw } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!tokenAddress && !!address },
   });
 
   const handleDeposit = async () => {
@@ -32,7 +56,7 @@ export const DepositForm: React.FC = () => {
       const result = await deposit(amount);
       
       if (result !== undefined) {
-        toast.success(`Deposit of ${amount} HYPE submitted!`);
+        toast.success(`Deposit of ${amount} ${symbol} submitted!`);
         setAmount('');
         // Refetch contract data after deposit
         setTimeout(() => refetchAll(), 2000);
@@ -45,16 +69,15 @@ export const DepositForm: React.FC = () => {
   };
 
   const handleMaxClick = () => {
-    if (balance) {
-      // Leave some ETH for gas
-      const maxAmount = Math.max(0, Number(formatEther(balance.value)) - 0.01);
-      setAmount(maxAmount.toString());
+    if (balanceRaw !== undefined) {
+      const formatted = Number(formatUnits(balanceRaw as bigint, Number(decimals)));
+      setAmount(formatted.toString());
     }
   };
 
   if (!isConnected) {
     return (
-      <Card className="border border-hyperliquid-accent/20 bg-hyperliquid-dark/50">
+      <Card className="hyperlend-card">
         <CardBody className="p-6">
           <div className="flex flex-col items-center text-center space-y-4">
             <Wallet className="h-12 w-12 text-hyperliquid-accent/60" />
@@ -81,15 +104,15 @@ export const DepositForm: React.FC = () => {
           <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center space-x-3">
-              <ArrowDownCircle className="h-6 w-6 text-hyperliquid-accent" />
-              <h3 className="text-xl font-bold text-white">Deposit HYPE</h3>
+              <ArrowDownCircle className="h-6 w-6 text-accent" />
+              <h3 className="text-xl font-bold">Deposit {symbol}</h3>
             </div>
 
             {/* Contract Status */}
-            <div className="flex items-center justify-between p-4 bg-hyperliquid-darker/30 rounded-lg border border-hyperliquid-accent/10">
+            <div className="flex items-center justify-between p-4 glass-morphism rounded-lg">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm text-gray-300">Contract Connected</span>
+                <span className="text-sm">Contract Connected</span>
               </div>
               <Chip size="sm" color="success" variant="flat">
                 Live
@@ -97,12 +120,12 @@ export const DepositForm: React.FC = () => {
             </div>
 
             {/* Balance Display */}
-            {balance && (
-              <div className="p-4 bg-hyperliquid-darker/30 rounded-lg border border-hyperliquid-accent/10">
+            {balanceRaw !== undefined && (
+              <div className="p-4 glass-morphism rounded-lg">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Available Balance</span>
-                  <span className="text-white font-mono">
-                    {Number(formatEther(balance.value)).toFixed(4)} ETH
+                  <span className="text-sm text-foreground-secondary">Available Balance</span>
+                  <span className="font-mono">
+                    {Number(formatUnits(balanceRaw as bigint, Number(decimals))).toFixed(4)} {symbol}
                   </span>
                 </div>
               </div>
@@ -112,7 +135,7 @@ export const DepositForm: React.FC = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-300">
-                  Amount (HYPE)
+                  Amount ({symbol})
                 </label>
                 <div className="relative">
                   <Input
@@ -123,14 +146,12 @@ export const DepositForm: React.FC = () => {
                     className="pr-16"
                     classNames={{
                       input: "text-right font-mono text-lg",
-                      inputWrapper: "border-hyperliquid-accent/20 bg-hyperliquid-darker/30",
+                      inputWrapper: "glass-morphism",
                     }}
                   />
                   <Button
                     size="sm"
-                    color="primary"
-                    variant="flat"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
+                    className="hyperlend-button absolute right-2 top-1/2 -translate-y-1/2 h-8"
                     onPress={handleMaxClick}
                   >
                     MAX
@@ -140,8 +161,7 @@ export const DepositForm: React.FC = () => {
 
               <Button
                 size="lg"
-                color="primary"
-                className="w-full bg-gradient-to-r from-hyperliquid-accent to-hyperliquid-accent/80 hover:from-hyperliquid-accent/90 hover:to-hyperliquid-accent/70 text-hyperliquid-dark font-semibold"
+                className="w-full hyperlend-button"
                 onPress={handleDeposit}
                 isLoading={isDepositing || isLoading}
                 isDisabled={!amount || Number(amount) <= 0}

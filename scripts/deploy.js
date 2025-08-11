@@ -1,15 +1,17 @@
 const hre = require("hardhat");
-
-// HyperLend contract addresses (mainnet)
-const HYPERLEND_POOL = "0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b";
-const HYPERLEND_DATA_PROVIDER = "0x5481bf8d3946E6A3168640c1D7523eB59F055a29";
-const WHYPE_TOKEN = "0x5555555555555555555555555555555555555555";
+const fs = require('fs');
+const path = require('path');
+const ADDRS = require('./addresses');
 
 async function main() {
-  console.log("🚀 Deploying NoLossLottery to", hre.network.name);
-  console.log("📈 Using HyperLend Pool:", HYPERLEND_POOL);
-  console.log("📊 Using Data Provider:", HYPERLEND_DATA_PROVIDER);
-  console.log("🪙 Using wHYPE Token:", WHYPE_TOKEN);
+  const net = hre.network.name;
+  const conf = ADDRS[net];
+  if (!conf) throw new Error(`No address config for network: ${net}`);
+
+  console.log("🚀 Deploying NoLossLottery to", net);
+  console.log("📈 Using HyperLend Pool:", conf.hyperLendPool);
+  console.log("📊 Using Data Provider:", conf.dataProvider);
+  console.log("🪙 Using wHYPE Token:", conf.wHYPE);
 
   // Get the deployer account
   const [deployer] = await hre.ethers.getSigners();
@@ -23,16 +25,35 @@ async function main() {
   const NoLossLottery = await hre.ethers.getContractFactory("NoLossLottery");
   
   console.log("⏳ Deploying contract...");
+  // Clamp gas limit below block gas limit to avoid provider issues
+  const latest = await hre.ethers.provider.getBlock('latest');
+  const blockGasLimit = latest && latest.gasLimit ? latest.gasLimit : hre.ethers.toBigInt(30_000_000);
+  const deployGasLimit = blockGasLimit - hre.ethers.toBigInt(200_000);
+
   const lottery = await NoLossLottery.deploy(
-    HYPERLEND_POOL,
-    HYPERLEND_DATA_PROVIDER,
-    WHYPE_TOKEN
+    conf.hyperLendPool,
+    conf.dataProvider,
+    conf.wHYPE,
+    { gasLimit: deployGasLimit }
   );
 
   await lottery.waitForDeployment();
 
   console.log("✅ NoLossLottery deployed to:", await lottery.getAddress());
   console.log("📋 Transaction hash:", lottery.deploymentTransaction().hash);
+
+  // Optional: configure protocol fee
+  const feeRecipientEnv = process.env.FEE_RECIPIENT;
+  const feeBpsEnv = process.env.FEE_BPS;
+  if (feeRecipientEnv) {
+    const feeBps = feeBpsEnv ? parseInt(feeBpsEnv, 10) : 100; // default 1%
+    console.log(`⚙️  Setting protocol fee: ${feeBps} bps to ${feeRecipientEnv}`);
+    const tx = await lottery.setFeeParameters(feeBps, feeRecipientEnv);
+    await tx.wait();
+    console.log("✅ Fee parameters set.");
+  } else {
+    console.log("ℹ️  Fee recipient not provided (FEE_RECIPIENT). Skipping fee configuration.");
+  }
 
   // Verify deployment by calling a view function
   try {
@@ -60,19 +81,26 @@ async function main() {
 
   // Save deployment info
   const deploymentInfo = {
-    network: hre.network.name,
+    network: net,
     contractAddress: await lottery.getAddress(),
     deployerAddress: deployer.address,
     transactionHash: lottery.deploymentTransaction().hash,
     blockNumber: lottery.deploymentTransaction().blockNumber,
     timestamp: new Date().toISOString(),
-    hyperLendPool: HYPERLEND_POOL,
-    dataProvider: HYPERLEND_DATA_PROVIDER,
-    depositToken: WHYPE_TOKEN
+    hyperLendPool: conf.hyperLendPool,
+    dataProvider: conf.dataProvider,
+    depositToken: conf.wHYPE
   };
 
   console.log("\n💾 Deployment Summary:");
   console.log(JSON.stringify(deploymentInfo, null, 2));
+
+  // Write per-network deployment artifact
+  const outDir = path.join(__dirname, '..', 'deployments');
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+  const outFile = path.join(outDir, `${net}.json`);
+  fs.writeFileSync(outFile, JSON.stringify(deploymentInfo, null, 2));
+  console.log(`📝 Saved deployment to ${outFile}`);
 }
 
 main()

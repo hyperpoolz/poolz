@@ -1,11 +1,26 @@
 import { useState, useCallback } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useReadContract, useWriteContract } from 'wagmi';
 import { parseEther, formatEther } from 'viem';
 import { CONTRACT_ADDRESSES } from '../utils/constants';
 import { type UserInfo, type ContractState } from '../types';
 import toast from 'react-hot-toast';
 
-// NoLossLottery Contract ABI (simplified for Session 1)
+// Minimal ERC20 ABI
+const ERC20_ABI = [
+  { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [
+    { name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }
+  ], outputs: [{ type: 'bool' }] },
+  { name: 'allowance', type: 'function', stateMutability: 'view', inputs: [
+    { name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }
+  ], outputs: [{ type: 'uint256' }] },
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [
+    { name: 'account', type: 'address' }
+  ], outputs: [{ type: 'uint256' }] },
+  { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+  { name: 'symbol', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+] as const;
+
+// NoLossLottery Contract ABI (slimmed)
 const NO_LOSS_LOTTERY_ABI = [
   // View functions
   {
@@ -63,15 +78,8 @@ const NO_LOSS_LOTTERY_ABI = [
     stateMutability: 'view',
     inputs: [{ name: 'user', type: 'address' }],
     outputs: [
-      {
-        type: 'tuple',
-        components: [
-          { name: 'depositAmount', type: 'uint256' },
-          { name: 'depositTime', type: 'uint256' },
-          { name: 'tickets', type: 'uint256' },
-          { name: 'lastTicketUpdate', type: 'uint256' },
-        ],
-      },
+      { type: 'uint256' },
+      { type: 'uint256' },
     ],
   },
   {
@@ -88,21 +96,7 @@ const NO_LOSS_LOTTERY_ABI = [
     inputs: [],
     outputs: [{ type: 'address' }],
   },
-  {
-    name: 'paused',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'bool' }],
-  },
-  // Write functions - Session 2 implementation
-  {
-    name: 'deposit',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [],
-    outputs: [],
-  },
+  // Write functions
   {
     name: 'depositWHYPE',
     type: 'function',
@@ -168,6 +162,7 @@ export const useContract = () => {
 
   // Get contract address for current chain
   const contractAddress = chainId ? CONTRACT_ADDRESSES[chainId]?.noLossLottery : '';
+  const tokenAddress = chainId ? CONTRACT_ADDRESSES[chainId]?.wHYPE : '';
 
   // Contract read hooks
   const { data: totalDeposits, refetch: refetchTotalDeposits } = useReadContract({
@@ -227,12 +222,7 @@ export const useContract = () => {
     query: { enabled: !!contractAddress },
   });
 
-  const { data: isPaused, refetch: refetchIsPaused } = useReadContract({
-    address: contractAddress as `0x${string}`,
-    abi: NO_LOSS_LOTTERY_ABI,
-    functionName: 'paused',
-    query: { enabled: !!contractAddress },
-  });
+  // removed paused/totalTickets for slim contract
 
   // Refetch all data
   const refetchAll = useCallback(() => {
@@ -244,7 +234,7 @@ export const useContract = () => {
     refetchAccruedYield();
     refetchUserInfo();
     refetchIsLotteryReady();
-    refetchIsPaused();
+    // slimmed: no paused/totalTickets refetch
   }, [
     refetchTotalDeposits,
     refetchPrizePool,
@@ -254,30 +244,40 @@ export const useContract = () => {
     refetchAccruedYield,
     refetchUserInfo,
     refetchIsLotteryReady,
-    refetchIsPaused,
+    
   ]);
 
-  // Write functions for Session 2
+  // Write functions: deposit uses ERC20 approve + depositWHYPE
   const deposit = useCallback(async (amount: string) => {
     if (!contractAddress || !address) {
       toast.error('Contract not available or wallet not connected');
+      return;
+    }
+    if (!tokenAddress) {
+      toast.error('Token not configured for this chain');
       return;
     }
 
     try {
       setIsLoading(true);
       const amountWei = parseEther(amount);
-      
-      const hash = await writeContract({
+      // Approve wHYPE to lottery contract
+      await writeContract({
+        address: tokenAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [contractAddress as `0x${string}`, amountWei],
+      });
+      // Call depositWHYPE on lottery
+      const tx = await writeContract({
         address: contractAddress as `0x${string}`,
         abi: NO_LOSS_LOTTERY_ABI,
-        functionName: 'deposit',
-        args: [],
-        value: amountWei, // Send native HYPE as msg.value
+        functionName: 'depositWHYPE',
+        args: [amountWei],
       });
 
-      toast.success('Deposit transaction submitted!');
-      return hash;
+      toast.success('Approve + deposit submitted!');
+      return tx;
     } catch (error) {
       console.error('Deposit failed:', error);
       toast.error('Deposit failed: ' + (error as Error).message);
@@ -285,7 +285,7 @@ export const useContract = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [contractAddress, address, writeContract]);
+  }, [contractAddress, tokenAddress, address, writeContract]);
 
   const withdraw = useCallback(async (amount: string) => {
     if (!contractAddress || !address) {
@@ -315,6 +315,48 @@ export const useContract = () => {
     }
   }, [contractAddress, address, writeContract]);
 
+  const harvest = useCallback(async () => {
+    if (!contractAddress) return;
+    try {
+      setIsLoading(true);
+      const tx = await writeContract({
+        address: contractAddress as `0x${string}`,
+        abi: NO_LOSS_LOTTERY_ABI,
+        functionName: 'harvestYield',
+        args: [],
+      });
+      toast.success('Harvest transaction submitted!');
+      return tx;
+    } catch (error) {
+      console.error('Harvest failed:', error);
+      toast.error('Harvest failed: ' + (error as Error).message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractAddress, writeContract]);
+
+  const executeLottery = useCallback(async () => {
+    if (!contractAddress) return;
+    try {
+      setIsLoading(true);
+      const tx = await writeContract({
+        address: contractAddress as `0x${string}`,
+        abi: NO_LOSS_LOTTERY_ABI,
+        functionName: 'executeLottery',
+        args: [],
+      });
+      toast.success('Lottery execution submitted!');
+      return tx;
+    } catch (error) {
+      console.error('Execute lottery failed:', error);
+      toast.error('Execute lottery failed: ' + (error as Error).message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractAddress, writeContract]);
+
   // Format contract state for easy consumption
   const contractState: ContractState = {
     totalDeposits: totalDeposits || 0n,
@@ -326,10 +368,10 @@ export const useContract = () => {
   };
 
   const formattedUserInfo: UserInfo | null = userInfo ? {
-    depositAmount: (userInfo as unknown as readonly [bigint, bigint, bigint, bigint])[0],
-    depositTime: (userInfo as unknown as readonly [bigint, bigint, bigint, bigint])[1],
-    tickets: (userInfo as unknown as readonly [bigint, bigint, bigint, bigint])[2],
-    lastTicketUpdate: (userInfo as unknown as readonly [bigint, bigint, bigint, bigint])[3],
+    depositAmount: (userInfo as unknown as readonly [bigint, bigint])[0],
+    depositTime: 0n,
+    tickets: (userInfo as unknown as readonly [bigint, bigint])[1],
+    lastTicketUpdate: 0n,
   } : null;
 
   return {
@@ -338,7 +380,6 @@ export const useContract = () => {
     userInfo: formattedUserInfo,
     accruedYield: accruedYield || 0n,
     isLotteryReady: isLotteryReady || false,
-    isPaused: isPaused || false,
     
     // Contract address
     contractAddress,
@@ -349,6 +390,8 @@ export const useContract = () => {
     // Functions
     deposit,
     withdraw,
+    harvest,
+    executeLottery,
     refetchAll,
     
     // Formatted data helpers

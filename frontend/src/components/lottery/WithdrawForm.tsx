@@ -57,7 +57,7 @@ export const WithdrawForm: React.FC = () => {
 
   if (!hasDeposit) {
     return (
-      <Card className="border border-hyperliquid-accent/20 bg-hyperliquid-dark/50">
+      <Card className="hyperlend-card">
         <CardBody className="p-6">
           <div className="flex flex-col items-center text-center space-y-4">
             <TrendingDown className="h-12 w-12 text-gray-500" />
@@ -84,16 +84,16 @@ export const WithdrawForm: React.FC = () => {
           <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center space-x-3">
-              <ArrowUpCircle className="h-6 w-6 text-red-400" />
-              <h3 className="text-xl font-bold text-white">Withdraw HYPE</h3>
+              <ArrowUpCircle className="h-6 w-6 text-accent" />
+              <h3 className="text-xl font-bold">Withdraw HYPE</h3>
             </div>
 
             {/* Current Deposit */}
-            <div className="p-4 bg-hyperliquid-darker/30 rounded-lg border border-hyperliquid-accent/10">
+            <div className="p-4 glass-morphism rounded-lg">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-400">Your Deposit</span>
-                  <span className="text-white font-mono">
+                  <span className="text-sm text-foreground-secondary">Your Deposit</span>
+                  <span className="font-mono">
                     {formatters.userDeposit} HYPE
                   </span>
                 </div>
@@ -102,8 +102,8 @@ export const WithdrawForm: React.FC = () => {
                   color="primary"
                   className="h-2"
                   classNames={{
-                    track: "bg-hyperliquid-darker",
-                    indicator: "bg-gradient-to-r from-hyperliquid-accent to-hyperliquid-accent/70"
+                    track: "",
+                    indicator: "bg-accent"
                   }}
                 />
               </div>
@@ -125,14 +125,12 @@ export const WithdrawForm: React.FC = () => {
                     className="pr-16"
                     classNames={{
                       input: "text-right font-mono text-lg",
-                      inputWrapper: "border-red-500/20 bg-hyperliquid-darker/30",
+                      inputWrapper: "glass-morphism",
                     }}
                   />
                   <Button
                     size="sm"
-                    color="danger"
-                    variant="flat"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-8"
+                    className="hyperlend-button absolute right-2 top-1/2 -translate-y-1/2 h-8"
                     onPress={handleMaxClick}
                   >
                     MAX
@@ -142,8 +140,7 @@ export const WithdrawForm: React.FC = () => {
 
               <Button
                 size="lg"
-                color="danger"
-                className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold"
+                className="w-full hyperlend-button"
                 onPress={handleWithdraw}
                 isLoading={isWithdrawing || isLoading}
                 isDisabled={!amount || Number(amount) <= 0 || Number(amount) > Number(formatters.userDeposit)}

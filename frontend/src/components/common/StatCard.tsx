@@ -69,7 +69,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       className={className}
     >
       <Card className={cn(
-        "border transition-all duration-200 hover:shadow-lg",
+        "hyperlend-card glow-on-hover",
         colors.card
       )}>
         <CardBody className="p-6">

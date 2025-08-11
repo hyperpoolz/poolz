@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -18,12 +19,12 @@ module.exports = {
     hyperevm_testnet: {
       url: "https://rpc.hyperliquid-testnet.xyz/evm",
       chainId: 998,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: (process.env.PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY) ? [process.env.PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY] : [],
     },
     hyperevm_mainnet: {
-      url: "https://api.hyperliquid.xyz/evm",
+      url: "https://hyperliquid.drpc.org",
       chainId: 999,
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      accounts: (process.env.PRIVATE_KEY || process.env.MAINNET_PRIVATE_KEY) ? [process.env.PRIVATE_KEY || process.env.MAINNET_PRIVATE_KEY] : [],
     },
   },
   etherscan: {

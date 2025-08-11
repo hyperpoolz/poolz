@@ -20,25 +20,22 @@ import { CONTRACT_ADDRESSES, NETWORKS } from '../../utils/constants';
 
 export const ContractStatus: React.FC = () => {
   const { chainId } = useAccount();
-  const { contractAddress, isPaused, contractState, isLoading } = useContract();
+  const { contractAddress, contractState, isLoading } = useContract();
 
   const currentNetwork = chainId === 999 ? NETWORKS.hyperEVM : NETWORKS.hyperEVMTestnet;
   const contractAddresses = chainId ? CONTRACT_ADDRESSES[chainId] : null;
 
   const getStatusColor = () => {
-    if (isPaused) return 'warning';
     if (contractAddress && contractState.currentRound > 0n) return 'success';
     return 'default';
   };
 
   const getStatusText = () => {
-    if (isPaused) return 'Paused';
     if (contractAddress && contractState.currentRound > 0n) return 'Active';
     return 'Initializing';
   };
 
   const getStatusIcon = () => {
-    if (isPaused) return <Pause className="w-4 h-4" />;
     if (contractAddress && contractState.currentRound > 0n) return <CheckCircle className="w-4 h-4" />;
     return <AlertTriangle className="w-4 h-4" />;
   };
@@ -51,7 +48,7 @@ export const ContractStatus: React.FC = () => {
       className="space-y-4"
     >
       {/* Main Status Card */}
-      <Card className="border border-border">
+      <Card className="hyperlend-card">
         <CardBody className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -59,8 +56,8 @@ export const ContractStatus: React.FC = () => {
                 <Shield className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground">Contract Status</h3>
-                <p className="text-sm text-foreground-secondary">Session 1 Demo - Foundation Layer</p>
+               <h3 className="text-lg font-semibold">Contract Status</h3>
+               <p className="text-sm text-foreground-secondary">HyperLend-style UI</p>
               </div>
             </div>
             
@@ -131,7 +128,7 @@ export const ContractStatus: React.FC = () => {
       </Card>
 
       {/* HyperLend Integration Status */}
-      <Card className="border border-border">
+      <Card className="hyperlend-card">
         <CardBody className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-background-secondary border border-border">

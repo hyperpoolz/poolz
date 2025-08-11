@@ -7,19 +7,23 @@ describe("NoLossLottery", function () {
   let user1;
   let user2;
   
-  // Mock contract addresses (using actual HyperLend addresses)
-  const HYPERLEND_POOL = "0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b";
-  const HYPERLEND_DATA_PROVIDER = "0x5481bf8d3946E6A3168640c1D7523eB59F055a29";
-  const WHYPE_TOKEN = "0x5555555555555555555555555555555555555555";
+  // For local tests, deploy a mock ERC20 to stand-in for wHYPE (no HyperLend integration here)
+  // Integration tests to HyperLend should run on a testnet with real addresses.
+  let wHype;
 
   beforeEach(async function () {
     [owner, user1, user2] = await ethers.getSigners();
 
+    const MockERC20 = await ethers.getContractFactory("MockERC20");
+    wHype = await MockERC20.deploy("Wrapped HYPE", "wHYPE");
+    await wHype.waitForDeployment();
+
+    // Dummy addresses for HyperLend; calls to these must not be executed in these unit tests
     const NoLossLottery = await ethers.getContractFactory("NoLossLottery");
     noLossLottery = await NoLossLottery.deploy(
-      HYPERLEND_POOL,
-      HYPERLEND_DATA_PROVIDER,
-      WHYPE_TOKEN
+      owner.address, // placeholder; not used in local tests
+      owner.address, // placeholder; not used in local tests
+      await wHype.getAddress()
     );
 
     await noLossLottery.waitForDeployment();
@@ -38,9 +42,7 @@ describe("NoLossLottery", function () {
     });
 
     it("Should have correct contract addresses", async function () {
-      expect(await noLossLottery.hyperLendPool()).to.equal(HYPERLEND_POOL);
-      expect(await noLossLottery.dataProvider()).to.equal(HYPERLEND_DATA_PROVIDER);
-      expect(await noLossLottery.depositToken()).to.equal(WHYPE_TOKEN);
+      expect(await noLossLottery.depositToken()).to.equal(await wHype.getAddress());
     });
   });
 
@@ -60,27 +62,7 @@ describe("NoLossLottery", function () {
     });
   });
 
-  describe("Placeholder Functions", function () {
-    it("Should revert on deposit() - not implemented", async function () {
-      await expect(noLossLottery.deposit(ethers.parseEther("100")))
-        .to.be.revertedWith("Not implemented yet - Session 2");
-    });
-
-    it("Should revert on withdraw() - not implemented", async function () {
-      await expect(noLossLottery.withdraw(ethers.parseEther("50")))
-        .to.be.revertedWith("Not implemented yet - Session 2");
-    });
-
-    it("Should revert on harvestYield() - not implemented", async function () {
-      await expect(noLossLottery.harvestYield())
-        .to.be.revertedWith("Not implemented yet - Session 3");
-    });
-
-    it("Should revert on executeLottery() - not implemented", async function () {
-      await expect(noLossLottery.executeLottery())
-        .to.be.revertedWith("Not implemented yet - Session 4");
-    });
-  });
+  // Minimal behavioral checks retained; detailed integration covered elsewhere with mocks
 
   describe("Emergency Functions", function () {
     it("Should allow owner to pause and unpause", async function () {

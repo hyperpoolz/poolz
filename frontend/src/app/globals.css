@@ -21,32 +21,17 @@ html {
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: #f9fafb;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(202, 234, 229, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(202, 234, 229, 0.03) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(42, 52, 47, 0.05) 0%, transparent 50%),
+    linear-gradient(135deg, #071311 0%, #1a241f 25%, #2a3732 50%, #1a241f 75%, #071311 100%);
+  min-height: 100vh;
+  background-attachment: fixed;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1a1a1b;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #2a2a2b;
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3a3a3b;
-}
 
 /* Custom utility classes */
 @layer utilities {
@@ -55,7 +40,10 @@ body {
   }
   
   .gradient-text {
-    @apply bg-gradient-to-r from-accent to-accent-light bg-clip-text text-transparent;
+    background: linear-gradient(135deg, #caeae5 0%, #e1f5f1 50%, #9db3ae 100%);
+    background-size: 200% 200%;
+    @apply bg-clip-text text-transparent;
+    animation: gradientShift 4s ease-in-out infinite;
   }
   
   .glass-effect {
@@ -92,10 +80,10 @@ body {
 
 @keyframes pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 5px rgba(0, 212, 170, 0.3);
+    box-shadow: 0 0 5px rgba(201, 234, 228, 0.2);
   }
   50% {
-    box-shadow: 0 0 20px rgba(0, 212, 170, 0.6);
+    box-shadow: 0 0 20px rgba(201, 234, 228, 0.4), 0 0 30px rgba(201, 234, 228, 0.2);
   }
 }
 
@@ -117,19 +105,28 @@ body {
   --rk-colors-modalBackground: #1a1a1b;
   --rk-colors-modalBorder: #2a2a2b;
   --rk-colors-modalText: #ffffff;
-  --rk-colors-modalTextSecondary: #a0a0a0;
-  --rk-colors-accent: #00d4aa;
-  --rk-colors-accentColor: #00d4aa;
-  --rk-colors-accentColorForeground: #000000;
+  --rk-colors-modalTextSecondary: #c9eae4;
+  --rk-colors-accent: #c9eae4;
+  --rk-colors-accentColor: #c9eae4;
+  --rk-colors-accentColorForeground: #0f0f10;
 }
 
-/* HeroUI custom overrides */
-.heroui-card {
-  @apply bg-background-secondary border-border;
+/* NextUI custom overrides */
+.nextui-card {
+  background: linear-gradient(145deg, rgba(26, 36, 31, 0.4) 0%, rgba(42, 52, 47, 0.2) 50%, rgba(26, 36, 31, 0.4) 100%);
+  @apply border-border shadow-card;
 }
 
-.heroui-button-primary {
-  @apply bg-accent hover:bg-accent-hover text-black;
+.nextui-card:hover {
+  @apply shadow-card-hover border-accent/30;
+}
+
+.nextui-button-primary {
+  @apply bg-accent hover:bg-accent-hover text-black shadow-lg;
+}
+
+.nextui-button-primary:hover {
+  @apply shadow-glow-sm;
 }
 
 /* Loading animation */
@@ -174,4 +171,123 @@ body {
     background: white !important;
     color: black !important;
   }
+}
+
+/* Enhanced HyperLend-inspired styles */
+.hyperlend-card {
+  @apply relative overflow-hidden;
+  background: linear-gradient(145deg, rgba(26, 36, 31, 0.6) 0%, rgba(42, 52, 47, 0.4) 50%, rgba(26, 36, 31, 0.6) 100%);
+  @apply border border-border shadow-glass backdrop-blur-glass;
+  @apply transition-all duration-500 ease-out;
+  @apply rounded-xl;
+}
+
+.hyperlend-card::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500;
+  background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(202, 234, 229, 0.1) 0%, transparent 50%);
+}
+
+.hyperlend-card:hover {
+  @apply border-accent/30 shadow-card-hover;
+  @apply transform translate-y-[-4px] scale-[1.02];
+}
+
+.hyperlend-card:hover::before {
+  @apply opacity-100;
+}
+
+.hyperlend-button {
+  @apply relative overflow-hidden;
+  background: linear-gradient(135deg, #caeae5 0%, #9db3ae 100%);
+  @apply text-background font-semibold;
+  @apply border-0 shadow-lg rounded-lg px-6 py-3;
+  @apply transition-all duration-300;
+}
+
+.hyperlend-button::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+}
+
+.hyperlend-button:hover {
+  @apply shadow-glow-lg transform scale-[1.05];
+  background: linear-gradient(135deg, #e1f5f1 0%, #caeae5 100%);
+}
+
+.hyperlend-button:hover::before {
+  @apply opacity-100;
+}
+
+.hyperlend-text-accent {
+  @apply text-transparent bg-clip-text;
+  background: linear-gradient(135deg, #caeae5 0%, #e1f5f1 50%, #9db3ae 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease-in-out infinite;
+}
+
+.glass-morphism {
+  @apply backdrop-blur-glass;
+  background: rgba(26, 36, 31, 0.3);
+  border: 1px solid rgba(202, 234, 229, 0.1);
+  @apply shadow-glass;
+}
+
+.floating-element {
+  animation: float 3s ease-in-out infinite;
+}
+
+.shimmer-effect {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(202, 234, 229, 0.1),
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Glow effects for interactive elements */
+.glow-on-hover:hover {
+  @apply shadow-glow-md;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Enhanced scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(26, 36, 31, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #caeae5, #9db3ae);
+  border-radius: 4px;
+  border: 1px solid rgba(202, 234, 229, 0.2);
+  @apply shadow-inner-glow;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #e1f5f1, #caeae5);
+  @apply shadow-glow-sm;
+}
+
+/* Mesh gradient background pattern */
+.mesh-gradient {
+  background: 
+    radial-gradient(circle at 25% 25%, rgba(202, 234, 229, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(157, 179, 174, 0.1) 0%, transparent 50%),
+    linear-gradient(135deg, #071311 0%, #1a241f 50%, #071311 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease-in-out infinite;
+}
+
+/* Enhanced focus styles */
+*:focus-visible {
+  @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-background;
 }

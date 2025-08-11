@@ -33,6 +33,8 @@ interface IPool {
         address to
     ) external returns (uint256);
 
+    // NOTE: Native asset variants omitted; this demo uses ERC20 wHYPE supply/withdraw only.
+
     /**
      * @notice Returns the user account data across all the reserves
      * @param user The address of the user

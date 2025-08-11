@@ -56,7 +56,8 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Total Deposits"
             value={formatCurrency(stats.totalDeposits)}
             subtitle="Principal protected"
@@ -64,7 +65,8 @@ export const PoolStats: React.FC = () => {
             color="primary"
             trend="+12.5%"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
 
         <motion.div
@@ -73,7 +75,8 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Current Prize Pool"
             value={formatCurrency(stats.prizePool)}
             subtitle="From accumulated yield"
@@ -81,7 +84,8 @@ export const PoolStats: React.FC = () => {
             color="success"
             trend="+45.2%"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
 
         <motion.div
@@ -90,7 +94,8 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Active Participants"
             value={formatNumber(stats.participantCount)}
             subtitle="Earning yield daily"
@@ -98,7 +103,8 @@ export const PoolStats: React.FC = () => {
             color="default"
             trend="+8"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
       </div>
 
@@ -110,7 +116,8 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Current APY"
             value={formatPercentage(stats.currentAPY)}
             subtitle="From HyperLend"
@@ -118,7 +125,8 @@ export const PoolStats: React.FC = () => {
             color="success"
             trend="↗️ +0.3%"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
 
         <motion.div
@@ -127,14 +135,16 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Next Lottery"
             value={formatTimeRemaining(stats.nextLotteryTime)}
             subtitle="Daily draws"
             icon={Clock}
             color="warning"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
 
         <motion.div
@@ -143,14 +153,16 @@ export const PoolStats: React.FC = () => {
           animate="visible"
           variants={cardVariants}
         >
-          <StatCard
+          <div className="hyperlend-card p-4">
+            <StatCard
             title="Total Tickets"
             value={formatNumber(stats.totalTickets)}
             subtitle="Active lottery entries"
             icon={Zap}
             color="primary"
             isLoading={isLoading}
-          />
+            />
+          </div>
         </motion.div>
       </div>
 
@@ -159,7 +171,7 @@ export const PoolStats: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6, duration: 0.5 }}
-        className="flex items-center justify-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20"
+        className="flex items-center justify-center gap-3 p-4 rounded-lg glass-morphism"
       >
         <div className="w-3 h-3 bg-success rounded-full animate-pulse" />
         <span className="text-sm font-medium text-success">
