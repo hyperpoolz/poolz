@@ -1,410 +1,512 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Card, CardBody, Button, Chip, Link } from '@nextui-org/react';
-import { ArrowRight, Shield, TrendingUp, Gift, ExternalLink, Zap, Target, DollarSign, Layers } from 'lucide-react';
-import { Header } from '../components/layout/Header';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Address, formatUnits, parseUnits } from "viem";
+import { contractAddresses, ERC20_ABI, V2_LOTTERY_ABI, WETH_LIKE_ABI } from "@/lib/contracts";
+import { formatToken, publicClient, getWalletClientFromEIP1193 } from "@/lib/wallet";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 
-export default function HomePage() {
+type RoundState = 0 | 1 | 2; // Active, Closed, Finalized
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  };
+export default function Home() {
+  const [address, setAddress] = useState<Address | null>(null);
+  const [decimals, setDecimals] = useState<number>(18);
+  const [symbol, setSymbol] = useState<string>("wHYPE");
+  const [tokenBalance, setTokenBalance] = useState<bigint>(BigInt(0));
+  const [userDeposit, setUserDeposit] = useState<bigint>(BigInt(0));
+  const [userTickets, setUserTickets] = useState<bigint>(BigInt(0));
+  const [totalTickets, setTotalTickets] = useState<bigint>(BigInt(0));
+  const [prizePool, setPrizePool] = useState<bigint>(BigInt(0));
+  const [ticketUnit, setTicketUnit] = useState<bigint>(BigInt("100000000000000000")); // 1e17
+  const [amountInput, setAmountInput] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [canClose, setCanClose] = useState<boolean>(false);
+  const [canFinalize, setCanFinalize] = useState<boolean>(false);
+  const [currentRound, setCurrentRound] = useState<bigint>(BigInt(1));
+  const [lastWinner, setLastWinner] = useState<Address | null>(null);
+  const youWon = useMemo(() => {
+    if (!address || !lastWinner) return false;
+    return address.toLowerCase() === lastWinner.toLowerCase();
+  }, [address, lastWinner]);
+  const { login, logout, ready, authenticated } = usePrivy() as any;
+  const { wallets, ready: walletsReady, connectWallet: privyConnectWallet, disconnectWallet } = useWallets() as any;
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.5, ease: "easeOut" },
-    },
-  };
+  // Connect
+  const onConnect = useCallback(async () => {
+    if (!ready) return;
+    if (!authenticated) {
+      await login();
+      return;
+    }
+    if (walletsReady && (!wallets || wallets.length === 0)) {
+      await privyConnectWallet();
+      return;
+    }
+  }, [ready, authenticated, login, walletsReady, wallets, privyConnectWallet]);
+
+  const onDisconnect = useCallback(async () => {
+    try {
+      if (wallets && wallets.length > 0 && disconnectWallet) {
+        await disconnectWallet(wallets[0]);
+      }
+    } catch {}
+    try {
+      await logout();
+    } catch {}
+    setAddress(null);
+  }, [wallets, disconnectWallet, logout]);
+
+  useEffect(() => {
+    if (!walletsReady) return;
+    if (!authenticated) {
+      setAddress(null);
+      return;
+    }
+    const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+    if (!primary) return;
+    (async () => {
+      try {
+        const provider = await primary.getEthereumProvider();
+        const client = await getWalletClientFromEIP1193(provider);
+        if (!client) return;
+        const [addr] = await client.requestAddresses();
+        setAddress(addr as Address);
+      } catch {}
+    })();
+  }, [authenticated, walletsReady, wallets]);
+
+  // Load token meta
+  useEffect(() => {
+    async function loadToken() {
+      try {
+        const [d, s] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddresses.depositToken as Address,
+            abi: ERC20_ABI,
+            functionName: "decimals",
+          }) as Promise<number>,
+          publicClient.readContract({
+            address: contractAddresses.depositToken as Address,
+            abi: ERC20_ABI,
+            functionName: "symbol",
+          }) as Promise<string>,
+        ]);
+        setDecimals(d);
+        setSymbol(s);
+      } catch {}
+    }
+    loadToken();
+  }, []);
+
+  // Load lottery data periodically
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const [tUnit, tTickets, pPool, roundInfo] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "TICKET_UNIT",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "totalTickets",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "prizePool",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "getCurrentRoundInfo",
+          }) as Promise<[bigint, bigint, boolean, boolean]>,
+        ]);
+        if (!active) return;
+        setTicketUnit(tUnit);
+        setTotalTickets(tTickets);
+        console.log("pPool", pPool);
+        setPrizePool(pPool);
+        setCurrentRound(roundInfo[0]);
+        setTimeLeft(Number(roundInfo[1]));
+        setCanClose(roundInfo[2]);
+        setCanFinalize(roundInfo[3]);
+
+        if (roundInfo[0] > BigInt(1)) {
+          const prev = (roundInfo[0] - BigInt(1)) as bigint;
+          const info = (await publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "getRoundInfo",
+            args: [prev],
+          })) as [bigint, bigint, bigint, bigint, Address, number];
+          const winner = info[4];
+          if (winner && winner !== "0x0000000000000000000000000000000000000000") setLastWinner(winner);
+        }
+      } catch {}
+    }
+    load();
+    const t = setInterval(load, 8000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Load user data
+  useEffect(() => {
+    if (!address) return;
+    let active = true;
+    async function loadUser() {
+      try {
+        const [dep, tix] = (await publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "getUserInfo",
+          args: [address as Address],
+        })) as [bigint, bigint];
+        const bal = (await publicClient.readContract({
+          address: contractAddresses.depositToken as Address,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [address as Address],
+        })) as bigint;
+        if (!active) return;
+        setUserDeposit(dep);
+        setUserTickets(tix);
+        setTokenBalance(bal);
+      } catch {}
+    }
+    loadUser();
+    const t = setInterval(loadUser, 8000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [address]);
+
+  const parsedAmount = useMemo(() => {
+    if (!amountInput) return BigInt(0);
+    try {
+      return parseUnits(amountInput, decimals);
+    } catch {
+      return BigInt(0);
+    }
+  }, [amountInput, decimals]);
+
+  const potentialTickets = useMemo(() => {
+    if (parsedAmount === BigInt(0)) return BigInt(0);
+    return parsedAmount / ticketUnit;
+  }, [parsedAmount, ticketUnit]);
+
+  const dynamicOdds = useMemo(() => {
+    const total = totalTickets + potentialTickets;
+    if (total === BigInt(0)) return "0%";
+    const user = userTickets + potentialTickets;
+    const pct = Number(user) / Number(total);
+    return `${(pct * 100).toFixed(2)}%`;
+  }, [totalTickets, userTickets, potentialTickets]);
+
+  const currentOdds = useMemo(() => {
+    if (totalTickets === BigInt(0)) return "0%";
+    const pct = Number(userTickets) / Number(totalTickets);
+    return `${(pct * 100).toFixed(2)}%`;
+  }, [totalTickets, userTickets]);
+
+  const onDeposit = useCallback(async () => {
+    setTxError(null);
+    if (!address || parsedAmount === BigInt(0)) return;
+    if (ticketUnit !== BigInt(0) && parsedAmount % ticketUnit !== BigInt(0)) {
+      setTxError(`Amount must be a multiple of ${formatUnits(ticketUnit, decimals)} ${symbol}`);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      const walletClient = await getWalletClientFromEIP1193(provider);
+      if (!walletClient) throw new Error("No wallet");
+
+      // Read current wHYPE balance
+      const currentBal = (await publicClient.readContract({
+        address: contractAddresses.depositToken as Address,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [address as Address],
+      })) as bigint;
+
+      // If wHYPE balance is insufficient, try to wrap the deficit from native HYPE
+      if (currentBal < parsedAmount) {
+        const deficit = parsedAmount - currentBal;
+        try {
+          const { request } = await publicClient.simulateContract({
+            address: contractAddresses.depositToken as Address,
+            abi: WETH_LIKE_ABI,
+            functionName: "deposit",
+            args: [],
+            account: address as Address,
+            value: deficit,
+          });
+          const wrapHash = await walletClient.writeContract(request);
+          await publicClient.waitForTransactionReceipt({ hash: wrapHash });
+        } catch (wrapErr: any) {
+          console.error(wrapErr);
+          setTxError("Not enough wHYPE and failed to wrap from HYPE. Ensure you have sufficient native HYPE.");
+          return;
+        }
+      }
+
+      // Approve token to lottery if needed
+      const allowance = (await publicClient.readContract({
+        address: contractAddresses.depositToken as Address,
+        abi: ERC20_ABI,
+        functionName: "allowance",
+        args: [address as Address, contractAddresses.lotteryContract as Address],
+      })) as bigint;
+
+      if (allowance < parsedAmount) {
+        const { request } = await publicClient.simulateContract({
+          address: contractAddresses.depositToken as Address,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [contractAddresses.lotteryContract as Address, parsedAmount],
+          account: address as Address,
+        });
+        const approveHash = await walletClient.writeContract(request);
+        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      }
+
+      const { request } = await publicClient.simulateContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "depositWHYPE",
+        args: [parsedAmount],
+        account: address as Address,
+      });
+      const depositHash = await walletClient.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash: depositHash });
+      setAmountInput("");
+      // Refresh user + global state immediately
+      try {
+        const [[dep, tix], tixTotal, pPool, bal] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "getUserInfo",
+            args: [address as Address],
+          }) as Promise<[bigint, bigint]>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "totalTickets",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "prizePool",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.depositToken as Address,
+            abi: ERC20_ABI,
+            functionName: "balanceOf",
+            args: [address as Address],
+          }) as Promise<bigint>,
+        ]);
+        setUserDeposit(dep);
+        setUserTickets(tix);
+        setTotalTickets(tixTotal);
+        setPrizePool(pPool);
+        setTokenBalance(bal);
+      } catch {}
+    } catch (e: any) {
+      console.error(e);
+      setTxError(e?.shortMessage || e?.message || "Transaction failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [address, parsedAmount]);
+
+  const onWithdraw = useCallback(async () => {
+    setTxError(null);
+    if (!address || parsedAmount === BigInt(0)) return;
+    if (ticketUnit !== BigInt(0) && parsedAmount % ticketUnit !== BigInt(0)) {
+      setTxError(`Amount must be a multiple of ${formatUnits(ticketUnit, decimals)} ${symbol}`);
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      const walletClient = await getWalletClientFromEIP1193(provider);
+      if (!walletClient) throw new Error("No wallet");
+      const { request } = await publicClient.simulateContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "withdraw",
+        args: [parsedAmount],
+        account: address as Address,
+      });
+      const hash = await walletClient.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      setAmountInput("");
+      // Refresh user + global state immediately
+      try {
+        const [[dep, tix], tixTotal, pPool, bal] = await Promise.all([
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "getUserInfo",
+            args: [address as Address],
+          }) as Promise<[bigint, bigint]>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "totalTickets",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "prizePool",
+          }) as Promise<bigint>,
+          publicClient.readContract({
+            address: contractAddresses.depositToken as Address,
+            abi: ERC20_ABI,
+            functionName: "balanceOf",
+            args: [address as Address],
+          }) as Promise<bigint>,
+        ]);
+        setUserDeposit(dep);
+        setUserTickets(tix);
+        setTotalTickets(tixTotal);
+        setPrizePool(pPool);
+        setTokenBalance(bal);
+      } catch {}
+    } catch (e: any) {
+      console.error(e);
+      setTxError(e?.shortMessage || e?.message || "Transaction failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [address, parsedAmount]);
+
+  const heroGradient = "from-[#0a0e1a] via-[#0f2540] to-[#0a0e1a]"; // friendlier gradient
 
   return (
-    <main className="min-h-screen bg-background">
-      <Header />
-      
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-12"
-        >
-          {/* Hero Section */}
-          <motion.div variants={itemVariants} className="text-center space-y-8">
-            <div className="space-y-6">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-              >
-                <Chip
-                  color="primary"
-                  variant="flat"
-                  className="mb-6 text-lg px-6 py-3"
-                  startContent={<Zap className="w-5 h-5" />}
-                >
-                  No-Loss Lottery Protocol
-                </Chip>
-              </motion.div>
-              
-              <h1 className="text-5xl md:text-7xl font-bold text-foreground mb-6">
-                <span className="gradient-text">HyperLoops</span>
-              </h1>
-              
-              <p className="text-2xl md:text-3xl text-foreground-secondary max-w-4xl mx-auto leading-relaxed">
-                Revolutionary <span className="text-accent font-semibold">no-loss lottery</span> protocol built on Hyperliquid EVM.
-                <br className="hidden md:block" />
-                Deposit wHYPE, earn yield through HyperLend, win prizes - 
-                <span className="text-success font-semibold">your principal stays safe</span>.
-              </p>
-            </div>
-
-            <motion.div
-              variants={itemVariants}
-              className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto"
-            >
-              <Button
-                as={Link}
-                href="/v2"
-                size="lg"
-                color="secondary"
-                className="font-semibold px-8 py-4 text-lg w-full sm:w-auto shadow-lg"
-                startContent={<Zap className="w-5 h-5" />}
-                endContent={<ArrowRight className="w-5 h-5" />}
-              >
-                Launch V2 (Latest)
-              </Button>
-              <Button
-                as={Link}
-                href="/app"
-                size="lg"
-                color="primary"
-                variant="bordered"
-                className="font-semibold px-8 py-4 text-lg w-full sm:w-auto"
-                endContent={<ArrowRight className="w-5 h-5" />}
-              >
-                V1 Classic
-              </Button>
-              <Button
-                as={Link}
-                href="/analytics"
-                size="lg"
-                variant="bordered"
-                className="font-semibold px-8 py-4 text-lg w-full sm:w-auto border-accent text-accent hover:bg-accent/10"
-                endContent={<Target className="w-5 h-5" />}
-              >
-                View Analytics
-              </Button>
-            </motion.div>
-
-          </motion.div>
-
-          {/* V2 Features Banner */}
-          <motion.div variants={itemVariants} className="space-y-6">
-            <Card className="p-6 bg-gradient-to-r from-secondary/20 via-primary/10 to-accent/20 border-secondary/30">
-              <CardBody className="space-y-4">
-                <div className="flex items-center justify-center gap-3">
-                  <Chip color="secondary" variant="shadow" size="lg" startContent={<Zap className="w-4 h-4" />}>
-                    Now Live: V2 Protocol
-                  </Chip>
+    <div className="min-h-screen w-full font-sans bg-background text-foreground">
+      <div className={`w-full bg-gradient-to-r ${heroGradient} text-white`}>
+        <div className="w-full px-6 py-5 border-b border-border">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold tracking-wide">HyperPool</h1>
+            {address ? (
+              <div className="flex items-center gap-2">
+                <div className="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded-md">
+                  {address.slice(0, 6)}...{address.slice(-4)}
                 </div>
-                <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground">
-                  Enhanced Features in V2
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                  <div className="text-center space-y-2">
-                    <div className="w-12 h-12 mx-auto bg-secondary/20 rounded-full flex items-center justify-center">
-                      <Target className="w-6 h-6 text-secondary" />
-                    </div>
-                    <h3 className="font-semibold">Fixed Ticketing</h3>
-                    <p className="text-sm text-foreground-secondary">0.1 wHYPE = 1 ticket • Fair and predictable system</p>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <div className="w-12 h-12 mx-auto bg-warning/20 rounded-full flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-warning" />
-                    </div>
-                    <h3 className="font-semibold">Secure Randomness</h3>
-                    <p className="text-sm text-foreground-secondary">Two-phase lottery with blockhash randomness</p>
-                  </div>
-                  <div className="text-center space-y-2">
-                    <div className="w-12 h-12 mx-auto bg-success/20 rounded-full flex items-center justify-center">
-                      <Layers className="w-6 h-6 text-success" />
-                    </div>
-                    <h3 className="font-semibold">Gas Optimized</h3>
-                    <p className="text-sm text-foreground-secondary">35% smaller contract • Built for scale</p>
-                  </div>
-                </div>
-                <div className="flex justify-center">
-                  <Button
-                    as={Link}
-                    href="/v2"
-                    color="secondary"
-                    size="lg"
-                    className="font-semibold px-8"
-                    endContent={<ArrowRight className="w-5 h-5" />}
-                  >
-                    Try V2 Now
-                  </Button>
-                </div>
-              </CardBody>
-            </Card>
-          </motion.div>
-
-          {/* How It Works Section */}
-          <motion.div variants={itemVariants} className="space-y-8">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                How It Works
-              </h2>
-              <p className="text-lg text-foreground-secondary max-w-2xl mx-auto">
-                HyperLoops combines DeFi yield generation with fair lottery mechanics to create a win-win system for all participants.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <Card className="p-6 bg-background-secondary border-border hover:border-accent/50 transition-colors">
-                <CardBody className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-accent/20 rounded-full flex items-center justify-center">
-                    <DollarSign className="w-8 h-8 text-accent" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground">1. Deposit wHYPE</h3>
-                  <p className="text-foreground-secondary">
-                    Deposit your wHYPE tokens into the protocol. Your principal remains safe and fully withdrawable.
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card className="p-6 bg-background-secondary border-border hover:border-accent/50 transition-colors">
-                <CardBody className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-success/20 rounded-full flex items-center justify-center">
-                    <TrendingUp className="w-8 h-8 text-success" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground">2. Earn Yield</h3>
-                  <p className="text-foreground-secondary">
-                    Deposits are automatically supplied to HyperLend, generating 5-20% APY through lending markets.
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card className="p-6 bg-background-secondary border-border hover:border-accent/50 transition-colors">
-                <CardBody className="text-center space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-warning/20 rounded-full flex items-center justify-center">
-                    <Gift className="w-8 h-8 text-warning" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-foreground">3. Win Prizes</h3>
-                  <p className="text-foreground-secondary">
-                    Accumulated yield forms prize pools. Fair lottery system distributes prizes daily to lucky winners.
-                  </p>
-                </CardBody>
-              </Card>
-            </div>
-          </motion.div>
-
-          {/* Key Features */}
-          <motion.div variants={itemVariants} className="space-y-8">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                Why Choose HyperLoops?
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <Card className="p-8 bg-gradient-to-br from-background-secondary to-background-tertiary border-border">
-                <CardBody className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-success/20 rounded-lg flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-success" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-foreground">Zero Principal Risk</h3>
-                  </div>
-                  <p className="text-foreground-secondary text-lg">
-                    Your deposited funds are always safe. Only the yield generated goes toward prize pools, ensuring you can withdraw your principal anytime.
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card className="p-8 bg-gradient-to-br from-background-secondary to-background-tertiary border-border">
-                <CardBody className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center">
-                      <Layers className="w-6 h-6 text-accent" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-foreground">Built on HyperLend</h3>
-                  </div>
-                  <p className="text-foreground-secondary text-lg">
-                    Leverages HyperLend's battle-tested lending protocol for reliable yield generation with deep liquidity and competitive rates.
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card className="p-8 bg-gradient-to-br from-background-secondary to-background-tertiary border-border">
-                <CardBody className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-warning/20 rounded-lg flex items-center justify-center">
-                      <Target className="w-6 h-6 text-warning" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-foreground">Fair & Transparent</h3>
-                  </div>
-                  <p className="text-foreground-secondary text-lg">
-                    Time-weighted lottery system ensures fairness. Larger deposits and longer holding periods increase your winning chances proportionally.
-                  </p>
-                </CardBody>
-              </Card>
-
-              <Card className="p-8 bg-gradient-to-br from-background-secondary to-background-tertiary border-border">
-                <CardBody className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-info/20 rounded-lg flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-info" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-foreground">Hyperliquid Native</h3>
-                  </div>
-                  <p className="text-foreground-secondary text-lg">
-                    First-of-its-kind protocol on Hyperliquid EVM, designed for the high-performance, low-cost environment traders love.
-                  </p>
-                </CardBody>
-              </Card>
-            </div>
-          </motion.div>
-
-          {/* External Links Section */}
-          <motion.div variants={itemVariants} className="space-y-8">
-            <div className="text-center">
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                Learn More
-              </h2>
-              <p className="text-lg text-foreground-secondary max-w-2xl mx-auto">
-                Dive deeper into the ecosystem powering HyperLoops.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              <Card className="p-6 bg-background-secondary border-border hover:border-accent/50 transition-colors">
-                <CardBody className="flex flex-row items-center justify-between">
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-semibold text-foreground">Hyperliquid Documentation</h3>
-                    <p className="text-foreground-secondary">
-                      Learn about Hyperliquid EVM, the high-performance blockchain powering HyperLoops.
-                    </p>
-                  </div>
-                  <Button
-                    as={Link}
-                    href="https://hyperliquid.gitbook.io/hyperliquid-docs/hyperevm"
-                    isExternal
-                    variant="flat"
-                    color="primary"
-                    size="lg"
-                    className="ml-4"
-                  >
-                    <ExternalLink className="w-5 h-5" />
-                  </Button>
-                </CardBody>
-              </Card>
-
-              <Card className="p-6 bg-background-secondary border-border hover:border-accent/50 transition-colors">
-                <CardBody className="flex flex-row items-center justify-between">
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-semibold text-foreground">HyperLend Documentation</h3>
-                    <p className="text-foreground-secondary">
-                      Explore HyperLend's lending protocol that generates yield for our prize pools.
-                    </p>
-                  </div>
-                  <Button
-                    as={Link}
-                    href="https://docs.hyperlend.finance/"
-                    isExternal
-                    variant="flat"
-                    color="primary"
-                    size="lg"
-                    className="ml-4"
-                  >
-                    <ExternalLink className="w-5 h-5" />
-                  </Button>
-                </CardBody>
-              </Card>
-            </div>
-          </motion.div>
-
-          {/* Call to Action */}
-          <motion.div variants={itemVariants} className="text-center space-y-6">
-            <Card className="p-8 bg-gradient-to-r from-accent/10 via-success/10 to-warning/10 border-accent/30">
-              <CardBody className="space-y-6">
-                <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-                  Ready to Start Winning?
-                </h2>
-                <p className="text-xl text-foreground-secondary max-w-2xl mx-auto">
-                  Join the no-loss lottery revolution. Earn yield, win prizes, keep your principal safe.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                  <Button
-                    as={Link}
-                    href="/v2"
-                    size="lg"
-                    color="secondary"
-                    className="font-semibold px-10 py-4 text-lg shadow-lg"
-                    startContent={<Zap className="w-5 h-5" />}
-                    endContent={<ArrowRight className="w-5 h-5" />}
-                  >
-                    Launch V2 Protocol
-                  </Button>
-                  <Button
-                    as={Link}
-                    href="/app"
-                    size="lg"
-                    variant="bordered"
-                    color="primary"
-                    className="font-semibold px-10 py-4 text-lg"
-                  >
-                    V1 Classic
-                  </Button>
-                  <Button
-                    as={Link}
-                    href="/analytics"
-                    size="lg"
-                    variant="bordered"
-                    className="font-semibold px-10 py-4 text-lg border-accent text-accent hover:bg-accent/10"
-                  >
-                    View Live Data
-                  </Button>
-                </div>
-              </CardBody>
-            </Card>
-          </motion.div>
-
-          {/* Footer */}
-          <motion.div variants={itemVariants} className="text-center py-12 border-t border-border">
-            <div className="space-y-4">
-              <div className="flex justify-center items-center gap-8 text-foreground-secondary">
-                <span className="flex items-center gap-2">
-                  <Zap className="w-4 h-4" />
-                  Built on Hyperliquid EVM
-                </span>
-                <span className="flex items-center gap-2">
-                  <Layers className="w-4 h-4" />
-                  Powered by HyperLend
-                </span>
-                <span className="flex items-center gap-2">
-                  <Shield className="w-4 h-4" />
-                  No-Loss Guarantee
-                </span>
+                <button onClick={onDisconnect} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary">
+                  Disconnect
+                </button>
               </div>
-              <p className="text-sm text-foreground-secondary">
-                © 2024 HyperLoops Protocol. Built for the Hyperliquid ecosystem.
-              </p>
+            ) : (
+              <button onClick={onConnect} className="bg-primary text-primary-foreground hover:opacity-90 transition px-4 py-2 text-sm rounded-md">
+                Connect Wallet
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="w-full px-6 py-6">
+          <div className="text-base text-muted-foreground mb-3">No-Loss Lottery on Hyperliquid</div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <StatCard label="Prize Pool" value={`${formatToken(prizePool, decimals, 4)} ${symbol}`} />
+            <StatCard label="Total Tickets" value={String(totalTickets)} />
+            <StatCard label="Time Left" value={timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"} />
+            <StatCard label="Your Odds" value={currentOdds} />
+          </div>
+          {youWon && (
+            <div className="mt-4 bg-secondary text-secondary-foreground px-4 py-3 border border-border rounded-lg">
+              🎉 You won the last round! The prize was automatically sent to your wallet.
             </div>
-          </motion.div>
-        </motion.div>
+          )}
+        </div>
       </div>
-    </main>
+
+      <div className="w-full px-6 py-8 grid gap-6 md:grid-cols-2">
+        <div className="border p-5 bg-card rounded-xl">
+          <h3 className="text-base font-medium">Deposit / Withdraw</h3>
+          <div className="mt-3 space-y-4">
+            <input
+              className="w-full border bg-background px-4 py-3 text-base rounded-lg"
+              placeholder={`Amount in ${symbol}`}
+              value={amountInput}
+              onChange={(e) => setAmountInput(e.target.value)}
+              inputMode="decimal"
+            />
+            <div className="text-sm text-muted-foreground">
+              You’ll get approximately {String(potentialTickets)} tickets. New odds after deposit: {dynamicOdds}
+            </div>
+            {address && (
+              <div className="text-sm text-muted-foreground">
+                Balance: {formatToken(tokenBalance, decimals)} {symbol}
+              </div>
+            )}
+            {txError && (
+              <div className="text-sm text-red-400">{txError}</div>
+            )}
+            <div className="flex gap-3">
+              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onDeposit} className="px-4 py-2 bg-primary text-primary-foreground disabled:opacity-50 text-sm rounded-md">
+                Deposit
+              </button>
+              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onWithdraw} className="px-4 py-2 bg-destructive text-white disabled:opacity-50 text-sm rounded-md">
+                Withdraw
+              </button>
+            </div>
+            <WrapHint />
+            {address && (
+              <div className="text-sm mt-2 text-muted-foreground">
+                Your deposit: {formatToken(userDeposit, decimals)} {symbol} · Your tickets: {String(userTickets)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="border p-5 bg-card rounded-xl">
+          <h3 className="text-base font-medium">Round Status</h3>
+          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+            <div>Round: {String(currentRound)}</div>
+            <div>Can Close: {canClose ? "Yes" : "No"} · Can Finalize: {canFinalize ? "Yes" : "No"}</div>
+            {lastWinner && (
+              <div className="mt-2 bg-secondary text-secondary-foreground px-3 py-2 border border-border rounded-md">
+                Last winner: {lastWinner.slice(0, 6)}...{lastWinner.slice(-4)}
+              </div>
+            )}
+          </div>
+          <p className="mt-4 text-muted-foreground text-sm">
+            Note: Anyone can call harvest/close/finalize and receive a small incentive. This demo omits those admin-like buttons for now.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-border bg-card rounded-xl px-4 py-3">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-lg font-medium mt-1">{value}</div>
+    </div>
+  );
+}
+
+function WrapHint() {
+  return (
+    <div className="text-sm text-muted-foreground">
+      Have HYPE but not wHYPE? We’ll auto-wrap what you need when depositing. You can also wrap via your wallet.
+    </div>
+  );
+}
+
