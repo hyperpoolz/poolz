@@ -25,3 +25,4 @@ Thumbs.db
 
 frontend/node_modules
 claude
+*/.next
