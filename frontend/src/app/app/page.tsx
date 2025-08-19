@@ -37,6 +37,12 @@ export default function AppPage() {
   const [claimed, setClaimed] = useState<boolean>(false);
   const [withdrawOpen, setWithdrawOpen] = useState<boolean>(false);
   const [infoOpen, setInfoOpen] = useState<boolean>(false);
+  const [canCloseRound, setCanCloseRound] = useState<boolean>(false);
+  const [canFinalizeRound, setCanFinalizeRound] = useState<boolean>(false);
+  const [roundState, setRoundState] = useState<number>(0); // 0=Active,1=Closed,2=Finalized
+  const [drawBlock, setDrawBlock] = useState<bigint>(BigInt(0));
+  const [actionBusy, setActionBusy] = useState<null | 'close' | 'finalize'>(null);
+  const [devSimEnd, setDevSimEnd] = useState<boolean>(false);
 
   const { login, logout, ready, authenticated } = usePrivy() as any;
   const { wallets, ready: walletsReady, connectWallet: privyConnectWallet, disconnectWallet } = useWallets() as any;
@@ -140,11 +146,24 @@ export default function AppPage() {
           }) as Promise<[bigint, bigint, boolean, boolean]>,
         ]);
         if (!active) return;
+        const roundId = roundInfo[0];
+        const roundData = (await publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "rounds",
+          args: [roundId],
+        })) as any;
         setTicketUnit(tUnit);
         setTotalTickets(tTickets);
         setPrizePool(pPool);
-        setCurrentRound(roundInfo[0]);
+        setCurrentRound(roundId);
         setTimeLeft(Number(roundInfo[1]));
+        setCanCloseRound(Boolean(roundInfo[2]));
+        setCanFinalizeRound(Boolean(roundInfo[3]));
+        try {
+          setDrawBlock((roundData?.[1] as bigint) ?? BigInt(0));
+          setRoundState(Number(roundData?.[5] ?? 0));
+        } catch {}
         setLastUpdatedMs(Date.now());
       } catch {}
     }
@@ -155,6 +174,75 @@ export default function AppPage() {
       clearInterval(t);
     };
   }, []);
+
+  const refreshRound = useCallback(async () => {
+    try {
+      const roundInfo = (await publicClient.readContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "getCurrentRoundInfo",
+      })) as [bigint, bigint, boolean, boolean];
+      const roundId = roundInfo[0];
+      const [tTickets, pPool, roundData] = await Promise.all([
+        publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "totalTickets",
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "prizePool",
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "rounds",
+          args: [roundId],
+        }) as Promise<any>,
+      ]);
+      setCurrentRound(roundId);
+      setTimeLeft(Number(roundInfo[1]));
+      setCanCloseRound(Boolean(roundInfo[2]));
+      setCanFinalizeRound(Boolean(roundInfo[3]));
+      setTotalTickets(tTickets);
+      setPrizePool(pPool);
+      try {
+        setDrawBlock((roundData?.[1] as bigint) ?? BigInt(0));
+        setRoundState(Number(roundData?.[5] ?? 0));
+      } catch {}
+      setLastUpdatedMs(Date.now());
+    } catch {}
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!address) return;
+    try {
+      const [dep, tix, bal] = await Promise.all([
+        publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "getUserInfo",
+          args: [address as Address],
+        }) as Promise<[bigint, bigint]>,
+        publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "tickets",
+          args: [address as Address],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: contractAddresses.depositToken as Address,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [address as Address],
+        }) as Promise<bigint>,
+      ]).then(([depTix, userTix, balVal]) => [depTix[0], userTix, balVal] as const);
+      setUserDeposit(dep);
+      setUserTickets(tix);
+      setTokenBalance(bal);
+    } catch {}
+  }, [address]);
 
   useEffect(() => {
     if (!address) return;
@@ -321,10 +409,15 @@ export default function AppPage() {
       const depositHash = await walletClient.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash: depositHash });
       setAmountInput("");
+      setUsdInput("");
+      await Promise.all([refreshUser(), refreshRound()]);
+      setInfoOpen(true);
+    } catch (err: any) {
+      setTxError(err?.shortMessage || err?.message || 'Transaction failed');
     } finally {
       setIsSubmitting(false);
     }
-  }, [address, parsedAmount]);
+  }, [address, parsedAmount, ticketUnit, wallets, refreshUser, refreshRound]);
 
   const onWithdraw = useCallback(async () => {
     setTxError(null);
@@ -346,10 +439,65 @@ export default function AppPage() {
       const hash = await walletClient.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
       setWithdrawInput("");
+      await Promise.all([refreshUser(), refreshRound()]);
+    } catch (err: any) {
+      setTxError(err?.shortMessage || err?.message || 'Transaction failed');
     } finally {
       setIsSubmitting(false);
     }
-  }, [address, parsedWithdraw]);
+  }, [address, parsedWithdraw, wallets, refreshUser, refreshRound, ticketUnit]);
+
+  const onCloseRound = useCallback(async () => {
+    if (!address) return;
+    setTxError(null);
+    setActionBusy('close');
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      const walletClient = await getWalletClientFromEIP1193(provider);
+      if (!walletClient) throw new Error("No wallet");
+      const { request } = await publicClient.simulateContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "closeRound",
+        args: [],
+        account: address as Address,
+      });
+      const hash = await walletClient.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      await refreshRound();
+    } catch (err: any) {
+      setTxError(err?.shortMessage || err?.message || 'Transaction failed');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [address, wallets, refreshRound]);
+
+  const onFinalizeRound = useCallback(async () => {
+    if (!address) return;
+    setTxError(null);
+    setActionBusy('finalize');
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      const walletClient = await getWalletClientFromEIP1193(provider);
+      if (!walletClient) throw new Error("No wallet");
+      const { request } = await publicClient.simulateContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "finalizeRound",
+        args: [],
+        account: address as Address,
+      });
+      const hash = await walletClient.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      await refreshRound();
+    } catch (err: any) {
+      setTxError(err?.shortMessage || err?.message || 'Transaction failed');
+    } finally {
+      setActionBusy(null);
+    }
+  }, [address, wallets, refreshRound]);
 
   const currentOdds = useMemo(() => {
     if (totalTickets === BigInt(0)) return "0%";
@@ -367,6 +515,9 @@ export default function AppPage() {
               <div className="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded-md">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </div>
+              <button onClick={() => setDevSimEnd((v) => !v)} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
+                {devSimEnd ? 'Reset Sim' : 'Simulate Round End'}
+              </button>
               <button onClick={() => { setClaimed(false); setDrawOpen(true); }} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
                 Simulate Result
               </button>
@@ -422,9 +573,14 @@ export default function AppPage() {
               ) : (
                 <div className="text-white/85 text-sm">≈ ${((Number(formatToken(parsedAmount, decimals))||0) * (usdPrice||0)).toFixed(2)} USD</div>
               ))}
-              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onDeposit} className="w-full max-w-lg mx-auto px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0) || !(roundState === 0 && !(devSimEnd || timeLeft <= 0))} onClick={onDeposit} className="w-full max-w-lg mx-auto px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Enter Lottery
               </button>
+              {roundState !== 0 || devSimEnd || timeLeft <= 0 ? (
+                <div className="text-amber-200/90 text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">
+                  Round ended or closed — deposits are disabled.
+                </div>
+              ) : null}
             </div>
             {parsedAmount > BigInt(0) && (
               <div className="mt-4 max-w-xl mx-auto">
@@ -444,12 +600,36 @@ export default function AppPage() {
                 <Tooltip text="Prize pool grows with harvested yield. Time left is until round end."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
               </div>
               <div className="mt-3 grid gap-3">
+                <Stat label="Round Status" value={`${roundState === 0 ? ((devSimEnd || timeLeft <= 0) ? (canCloseRound ? 'Ended — Ready to Close' : 'Ended') : 'Open') : (roundState === 1 ? (canFinalizeRound ? 'Closed — Ready to Finalize' : 'Closed — Awaiting Draw Block') : 'Finalized')}`} />
                 <Stat label="Prize Pool" value={`${formatToken(prizePool, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(prizePool, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
+                <Stat label="Your Deposit" value={`${formatToken(userDeposit, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(userDeposit, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
                 <Stat label="Total Tickets" value={String(totalTickets)} />
                 <Stat label="Your Tickets" value={String(userTickets)} />
                 <Stat label="Your Odds" value={currentOdds} />
-                <Stat label="Time Left" value={timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"} />
+                <Stat label="Time Left" value={(devSimEnd ? 'Ended' : (timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"))} />
               </div>
+              {(roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound) || (roundState === 1) ? (
+                <div className="mt-4 rounded-lg border border-border bg-background/60 p-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="text-sm text-muted-foreground">
+                      {roundState === 0 ? 'Round has ended. You can close the round to schedule the draw.' : (canFinalizeRound ? 'Draw block reached. You can finalize to select a winner.' : `Waiting for draw block #${drawBlock.toString()} to be reachable...`)}
+                    </div>
+                    <div className="flex gap-2">
+                      {roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound && (
+                        <button onClick={onCloseRound} disabled={actionBusy==='close'} className="px-3 py-2 rounded-md bg-amber-600/80 text-white cursor-pointer disabled:opacity-60">
+                          {actionBusy==='close' ? 'Closing…' : 'Close Round'}
+                        </button>
+                      )}
+                      {roundState === 1 && (
+                        <button onClick={onFinalizeRound} disabled={!canFinalizeRound || actionBusy==='finalize'} className="px-3 py-2 rounded-md bg-primary text-primary-foreground cursor-pointer disabled:opacity-60">
+                          {actionBusy==='finalize' ? 'Finalizing…' : 'Finalize Round'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {txError && <div className="mt-2 text-xs text-red-400">{txError}</div>}
+                </div>
+              ) : null}
             </div>
             <div className="border p-5 bg-card rounded-xl">
               <div className="flex items-center gap-2">
@@ -490,7 +670,7 @@ export default function AppPage() {
                     onChange={(e) => setWithdrawInput(e.target.value)}
                     inputMode="decimal"
                   />
-                  <button disabled={!address || isSubmitting || parsedWithdraw === BigInt(0)} onClick={onWithdraw} className="px-6 py-3 bg-destructive text-white rounded-md font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  <button disabled={!address || isSubmitting || parsedWithdraw === BigInt(0)} onClick={onWithdraw} className="px-6 py-3 bg-secondary text-secondary-foreground border border-border rounded-md font-medium cursor-pointer hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed">
                     Withdraw
                   </button>
                 </div>
