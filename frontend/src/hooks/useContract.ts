@@ -201,6 +201,14 @@ const NO_LOSS_LOTTERY_ABI = [
       { name: 'round', type: 'uint256', indexed: false },
     ],
   },
+  {
+    name: 'YieldHarvested',
+    type: 'event',
+    inputs: [
+      { name: 'yieldAmount', type: 'uint256', indexed: false },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
 ] as const;
 
 // Minimal ABI for HyperLend Data Provider to read liquidityRate
@@ -387,10 +395,15 @@ export const useContract = () => {
         args: [contractAddress as `0x${string}`, amountWei],
       }) as unknown as Hash;
       // Wait for approval confirmation to avoid race conditions
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
+      try {
+        if (publicClient) {
+          await publicClient.waitForTransactionReceipt({ hash: approveHash as `0x${string}` });
+        }
+        toast.success('Approval confirmed', { id: 'approve' });
+      } catch (approvalError) {
+        console.warn('Approval receipt failed, but transaction was sent:', approvalError);
+        toast.success('Approval transaction sent! Please check your wallet.', { id: 'approve' });
       }
-      toast.success('Approval submitted', { id: 'approve' });
 
       toast.loading('Step 2/2: Depositing to HyperLoops…', { id: 'deposit' });
       // Provide a friendly readable description via toast and rely on wallet's UI
@@ -400,10 +413,16 @@ export const useContract = () => {
         functionName: 'depositWHYPE',
         args: [amountWei],
       }) as unknown as Hash;
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash: depositHash as `0x${string}` });
+      
+      try {
+        if (publicClient) {
+          await publicClient.waitForTransactionReceipt({ hash: depositHash as `0x${string}` });
+        }
+        toast.success('Deposit confirmed on-chain', { id: 'deposit' });
+      } catch (receiptError) {
+        console.warn('Transaction receipt failed, but transaction was sent:', receiptError);
+        toast.success('Deposit transaction sent! Please check your wallet.', { id: 'deposit' });
       }
-      toast.success('Deposit confirmed on-chain', { id: 'deposit' });
       // Refresh all reads
       refetchAll();
       return depositHash;
@@ -459,21 +478,43 @@ export const useContract = () => {
     if (!contractAddress) return;
     try {
       setIsLoading(true);
+      toast.loading('Harvesting yield...', { id: 'harvest' });
+      
       const tx = await writeContract({
         address: contractAddress as `0x${string}`,
         abi: NO_LOSS_LOTTERY_ABI,
         functionName: 'harvestYield',
         args: [],
       }) as unknown as Hash;
-      if (publicClient) {
-        await publicClient.waitForTransactionReceipt({ hash: tx as `0x${string}` });
+      
+      if (publicClient && tx) {
+        toast.loading('Waiting for confirmation...', { id: 'harvest' });
+        try {
+          await publicClient.waitForTransactionReceipt({ 
+            hash: tx as `0x${string}`,
+            timeout: 60000 // 60 second timeout
+          });
+          toast.success('Yield harvested successfully!', { id: 'harvest' });
+        } catch (receiptError) {
+          // Transaction might still be successful even if receipt fails
+          console.warn('Transaction receipt failed, but transaction was sent:', receiptError);
+          toast.success('Harvest transaction sent! Please check your wallet.', { id: 'harvest' });
+        }
+      } else {
+        toast.success('Harvest transaction sent!', { id: 'harvest' });
       }
-      toast.success('Harvest confirmed!');
+      
+      // Always refetch data after attempt
       refetchAll();
       return tx;
     } catch (error) {
       console.error('Harvest failed:', error);
-      toast.error('Harvest failed: ' + (error as Error).message);
+      const message = (error as Error).message || '';
+      if (message.toLowerCase().includes('user rejected')) {
+        toast.error('Transaction rejected by user', { id: 'harvest' });
+      } else {
+        toast.error('Harvest failed: ' + message.slice(0, 100), { id: 'harvest' });
+      }
       throw error;
     } finally {
       setIsLoading(false);
@@ -484,21 +525,32 @@ export const useContract = () => {
     if (!contractAddress) return;
     try {
       setIsLoading(true);
+      toast.loading('Executing lottery...', { id: 'lottery-execute' });
+      
       const tx = await writeContract({
         address: contractAddress as `0x${string}`,
         abi: NO_LOSS_LOTTERY_ABI,
         functionName: 'executeLottery',
         args: [],
       }) as unknown as Hash;
+      
+      toast.loading('Waiting for confirmation...', { id: 'lottery-execute' });
+      
       if (publicClient) {
         await publicClient.waitForTransactionReceipt({ hash: tx as `0x${string}` });
       }
-      toast.success('Lottery executed!');
+      
+      toast.success('Lottery executed successfully!', { id: 'lottery-execute' });
       refetchAll();
       return tx;
     } catch (error) {
       console.error('Execute lottery failed:', error);
-      toast.error('Execute lottery failed: ' + (error as Error).message);
+      const message = (error as Error).message || '';
+      if (message.toLowerCase().includes('user rejected')) {
+        toast.error('Transaction rejected by user', { id: 'lottery-execute' });
+      } else {
+        toast.error('Lottery execution failed: ' + message.slice(0, 100), { id: 'lottery-execute' });
+      }
       throw error;
     } finally {
       setIsLoading(false);

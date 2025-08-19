@@ -71,17 +71,29 @@ export default function HomePage() {
 
             <motion.div
               variants={itemVariants}
-              className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-lg mx-auto"
+              className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto"
             >
+              <Button
+                as={Link}
+                href="/v2"
+                size="lg"
+                color="secondary"
+                className="font-semibold px-8 py-4 text-lg w-full sm:w-auto shadow-lg"
+                startContent={<Zap className="w-5 h-5" />}
+                endContent={<ArrowRight className="w-5 h-5" />}
+              >
+                Launch V2 (Latest)
+              </Button>
               <Button
                 as={Link}
                 href="/app"
                 size="lg"
                 color="primary"
+                variant="bordered"
                 className="font-semibold px-8 py-4 text-lg w-full sm:w-auto"
                 endContent={<ArrowRight className="w-5 h-5" />}
               >
-                Launch App
+                V1 Classic
               </Button>
               <Button
                 as={Link}
@@ -95,6 +107,57 @@ export default function HomePage() {
               </Button>
             </motion.div>
 
+          </motion.div>
+
+          {/* V2 Features Banner */}
+          <motion.div variants={itemVariants} className="space-y-6">
+            <Card className="p-6 bg-gradient-to-r from-secondary/20 via-primary/10 to-accent/20 border-secondary/30">
+              <CardBody className="space-y-4">
+                <div className="flex items-center justify-center gap-3">
+                  <Chip color="secondary" variant="shadow" size="lg" startContent={<Zap className="w-4 h-4" />}>
+                    Now Live: V2 Protocol
+                  </Chip>
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold text-center text-foreground">
+                  Enhanced Features in V2
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 mx-auto bg-secondary/20 rounded-full flex items-center justify-center">
+                      <Target className="w-6 h-6 text-secondary" />
+                    </div>
+                    <h3 className="font-semibold">Fixed Ticketing</h3>
+                    <p className="text-sm text-foreground-secondary">0.1 wHYPE = 1 ticket • Fair and predictable system</p>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 mx-auto bg-warning/20 rounded-full flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-warning" />
+                    </div>
+                    <h3 className="font-semibold">Secure Randomness</h3>
+                    <p className="text-sm text-foreground-secondary">Two-phase lottery with blockhash randomness</p>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 mx-auto bg-success/20 rounded-full flex items-center justify-center">
+                      <Layers className="w-6 h-6 text-success" />
+                    </div>
+                    <h3 className="font-semibold">Gas Optimized</h3>
+                    <p className="text-sm text-foreground-secondary">35% smaller contract • Built for scale</p>
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <Button
+                    as={Link}
+                    href="/v2"
+                    color="secondary"
+                    size="lg"
+                    className="font-semibold px-8"
+                    endContent={<ArrowRight className="w-5 h-5" />}
+                  >
+                    Try V2 Now
+                  </Button>
+                </div>
+              </CardBody>
+            </Card>
           </motion.div>
 
           {/* How It Works Section */}
@@ -285,13 +348,24 @@ export default function HomePage() {
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                   <Button
                     as={Link}
-                    href="/app"
+                    href="/v2"
                     size="lg"
-                    color="primary"
+                    color="secondary"
                     className="font-semibold px-10 py-4 text-lg shadow-lg"
+                    startContent={<Zap className="w-5 h-5" />}
                     endContent={<ArrowRight className="w-5 h-5" />}
                   >
-                    Launch HyperLoops
+                    Launch V2 Protocol
+                  </Button>
+                  <Button
+                    as={Link}
+                    href="/app"
+                    size="lg"
+                    variant="bordered"
+                    color="primary"
+                    className="font-semibold px-10 py-4 text-lg"
+                  >
+                    V1 Classic
                   </Button>
                   <Button
                     as={Link}

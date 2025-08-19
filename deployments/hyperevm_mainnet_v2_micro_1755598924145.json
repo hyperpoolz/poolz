@@ -1,0 +1,20 @@
+{
+  "network": "hyperevm_mainnet",
+  "chainId": "999",
+  "timestamp": "2025-08-19T10:22:04.145Z",
+  "deployer": "0xB0e83Be114b698dF6DB62cCAD8c2b2F3eb83bCBB",
+  "contracts": {
+    "NoLossLotteryV2Micro": "0x79A84DB1F6A1C3a303A49120720b81EAdD177F7d",
+    "HyperLendPool": "0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b",
+    "DataProvider": "0x5481bf8d3946E6A3168640c1D7523eB59F055a29",
+    "wHYPEToken": "0x5555555555555555555555555555555555555555"
+  },
+  "features": [
+    "Essential deposit/withdraw functions",
+    "Basic lottery execution",
+    "Minimal view functions",
+    "Custom errors for smaller bytecode",
+    "No complex analytics",
+    "Optimized for deployment size"
+  ]
+}

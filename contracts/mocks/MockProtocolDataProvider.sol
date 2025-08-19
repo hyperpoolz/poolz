@@ -11,6 +11,10 @@ contract MockProtocolDataProvider {
         userBalance[asset][user] = balance;
     }
 
+    function setUserReserveData(address asset, address user, uint256 balance) external {
+        userBalance[asset][user] = balance;
+    }
+
     function setReserveLiquidityRate(address asset, uint256 rate) external {
         reserveLiquidityRate[asset] = rate;
     }

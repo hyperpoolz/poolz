@@ -14,13 +14,13 @@
   "../node_modules/@nextui-org/navbar/dist/chunk-5HDGDWGW.mjs -> @nextui-org/dom-animation": {
     "id": "../node_modules/@nextui-org/navbar/dist/chunk-5HDGDWGW.mjs -> @nextui-org/dom-animation",
     "files": [
-      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs-_b17a1.js"
+      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs.js"
     ]
   },
   "../node_modules/@nextui-org/navbar/dist/chunk-QKHJHOQ7.mjs -> @nextui-org/dom-animation": {
     "id": "../node_modules/@nextui-org/navbar/dist/chunk-QKHJHOQ7.mjs -> @nextui-org/dom-animation",
     "files": [
-      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs-_b17a1.js"
+      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs.js"
     ]
   },
   "../node_modules/@nextui-org/popover/dist/chunk-3ZYJG5UF.mjs -> @nextui-org/dom-animation": {
@@ -29,14 +29,12 @@
   },
   "../node_modules/@nextui-org/popover/dist/chunk-XVHGMAVG.mjs -> @nextui-org/dom-animation": {
     "id": "../node_modules/@nextui-org/popover/dist/chunk-XVHGMAVG.mjs -> @nextui-org/dom-animation",
-    "files": [
-      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs-_b17a0.js"
-    ]
+    "files": []
   },
   "../node_modules/@nextui-org/ripple/dist/chunk-MRKSP4U5.mjs -> @nextui-org/dom-animation": {
     "id": "../node_modules/@nextui-org/ripple/dist/chunk-MRKSP4U5.mjs -> @nextui-org/dom-animation",
     "files": [
-      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs-_b17a1.js"
+      "static/chunks/_app-pages-browser_node_modules_nextui-org_dom-animation_dist_index_mjs.js"
     ]
   },
   "../node_modules/@nextui-org/tooltip/dist/chunk-LY4WDGUU.mjs -> @nextui-org/dom-animation": {

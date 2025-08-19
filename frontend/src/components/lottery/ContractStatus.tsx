@@ -88,7 +88,7 @@ export const ContractStatus: React.FC = () => {
                   size="sm"
                   variant="ghost"
                   isIconOnly
-                  onClick={() => window.open(`${currentNetwork.blockExplorer}/address/${contractAddress}`, '_blank')}
+                  onPress={() => window.open(`${currentNetwork.blockExplorer}/address/${contractAddress}`, '_blank')}
                 >
                   <ExternalLink className="w-4 h-4" />
                 </Button>

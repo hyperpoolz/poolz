@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { Navbar, NavbarBrand, NavbarContent, NavbarItem, Button } from '@nextui-org/react';
+import { Navbar, NavbarBrand, NavbarContent, NavbarItem, Button, Chip, Link } from '@nextui-org/react';
 import { motion } from 'framer-motion';
-import { Zap, TrendingUp, Trophy } from 'lucide-react';
+import { Zap, TrendingUp, Trophy, Sparkles } from 'lucide-react';
 
 export const Header: React.FC = () => {
   return (
@@ -33,7 +33,34 @@ export const Header: React.FC = () => {
         </motion.div>
       </NavbarBrand>
 
-      <NavbarContent className="hidden sm:flex gap-6" justify="center">
+      <NavbarContent className="hidden md:flex gap-4" justify="center">
+        <NavbarItem>
+          <Button
+            as={Link}
+            href="/v2"
+            variant="solid"
+            color="secondary"
+            size="sm"
+            className="font-semibold"
+            startContent={<Sparkles className="w-3 h-3" />}
+          >
+            V2 Latest
+          </Button>
+        </NavbarItem>
+        
+        <NavbarItem>
+          <Button
+            as={Link}
+            href="/app"
+            variant="bordered"
+            color="primary"
+            size="sm"
+            className="font-semibold"
+          >
+            V1 Classic
+          </Button>
+        </NavbarItem>
+
         <NavbarItem>
           <motion.div
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-background-secondary border border-border"
@@ -96,7 +123,7 @@ export const Header: React.FC = () => {
                       if (!connected) {
                         return (
                           <Button
-                            onClick={openConnectModal}
+                            onPress={openConnectModal}
                             color="primary"
                             variant="solid"
                             className="font-semibold"
@@ -110,7 +137,7 @@ export const Header: React.FC = () => {
                       if (chain.unsupported) {
                         return (
                           <Button
-                            onClick={openChainModal}
+                            onPress={openChainModal}
                             color="danger"
                             variant="solid"
                             className="font-semibold"
@@ -124,7 +151,7 @@ export const Header: React.FC = () => {
                       return (
                         <div className="flex items-center gap-2">
                           <Button
-                            onClick={openChainModal}
+                            onPress={openChainModal}
                             variant="bordered"
                             size="sm"
                             className="border-border hover:border-border-hover"
@@ -153,7 +180,7 @@ export const Header: React.FC = () => {
                           </Button>
 
                           <Button
-                            onClick={openAccountModal}
+                            onPress={openAccountModal}
                             variant="solid"
                             color="primary"
                             className="font-mono font-semibold"

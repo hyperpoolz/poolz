@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("hardhat-contract-sizer");
 require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -8,8 +9,9 @@ module.exports = {
     settings: {
       optimizer: {
         enabled: true,
-        runs: 200,
+        runs: 1, // Optimize for deployment size
       },
+      viaIR: true, // Enable IR for better optimization
     },
   },
   networks: {
@@ -25,6 +27,9 @@ module.exports = {
       url: "https://hyperliquid.drpc.org",
       chainId: 999,
       accounts: (process.env.PRIVATE_KEY || process.env.MAINNET_PRIVATE_KEY) ? [process.env.PRIVATE_KEY || process.env.MAINNET_PRIVATE_KEY] : [],
+      gas: "auto",
+      gasPrice: "auto",
+      timeout: 120000,
     },
   },
   etherscan: {
@@ -48,5 +53,10 @@ module.exports = {
         }
       }
     ]
+  },
+  contractSizer: {
+    alphaSort: true,
+    runOnCompile: true,
+    disambiguatePaths: false,
   },
 };

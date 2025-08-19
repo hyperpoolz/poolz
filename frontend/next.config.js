@@ -28,6 +28,13 @@ const nextConfig = {
       };
     }
 
+    // Handle pino-pretty and other optional dependencies
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^pino-pretty$/,
+      })
+    );
+
     // Add support for importing .svg files as React components
     config.module.rules.push({
       test: /\.svg$/,
