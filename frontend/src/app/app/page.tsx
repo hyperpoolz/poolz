@@ -5,7 +5,9 @@ import { Address, formatUnits, parseUnits } from "viem";
 import { contractAddresses, ERC20_ABI, V2_LOTTERY_ABI, WETH_LIKE_ABI } from "@/lib/contracts";
 import { formatToken, publicClient, getWalletClientFromEIP1193 } from "@/lib/wallet";
 import Tooltip from "@/components/Tooltip";
-import { fetchTokenPriceUsd } from "@/lib/utils";
+import { fetchTokenPriceUsd, cn } from "@/lib/utils";
+import { NETWORKS } from "@/lib/chains";
+import { ChevronDown, Loader2, Ticket, Coins, Gift, Sparkles } from "lucide-react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 
 export default function AppPage() {
@@ -18,7 +20,10 @@ export default function AppPage() {
   const [totalTickets, setTotalTickets] = useState<bigint>(BigInt(0));
   const [prizePool, setPrizePool] = useState<bigint>(BigInt(0));
   const [ticketUnit, setTicketUnit] = useState<bigint>(BigInt("100000000000000000"));
-  const [amountInput, setAmountInput] = useState<string>("");
+  const [amountInput, setAmountInput] = useState<string>(""); // token amount
+  const [usdInput, setUsdInput] = useState<string>("");
+  const [amountMode, setAmountMode] = useState<'usd' | 'token'>("usd");
+  const [withdrawInput, setWithdrawInput] = useState<string>("");
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,6 +32,11 @@ export default function AppPage() {
   const [currentRound, setCurrentRound] = useState<bigint>(BigInt(1));
   const [usdPrice, setUsdPrice] = useState<number | null>(null);
   const [lastUpdatedMs, setLastUpdatedMs] = useState<number>(Date.now());
+  const [drawOpen, setDrawOpen] = useState<boolean>(false);
+  const [claiming, setClaiming] = useState<boolean>(false);
+  const [claimed, setClaimed] = useState<boolean>(false);
+  const [withdrawOpen, setWithdrawOpen] = useState<boolean>(false);
+  const [infoOpen, setInfoOpen] = useState<boolean>(false);
 
   const { login, logout, ready, authenticated } = usePrivy() as any;
   const { wallets, ready: walletsReady, connectWallet: privyConnectWallet, disconnectWallet } = useWallets() as any;
@@ -178,13 +188,57 @@ export default function AppPage() {
   }, [address]);
 
   const parsedAmount = useMemo(() => {
-    if (!amountInput) return BigInt(0);
     try {
-      return parseUnits(amountInput, decimals);
+      if (amountMode === 'token') {
+        if (!amountInput) return BigInt(0);
+        return parseUnits(amountInput, decimals);
+      }
+      // USD mode
+      if (!usdInput || usdPrice === null || usdPrice <= 0) return BigInt(0);
+      const tokens = Number(usdInput) / Number(usdPrice);
+      if (!isFinite(tokens) || tokens <= 0) return BigInt(0);
+      const precision = Math.min(8, decimals);
+      const tokensStr = tokens.toFixed(precision);
+      return parseUnits(tokensStr, decimals);
     } catch {
       return BigInt(0);
     }
-  }, [amountInput, decimals]);
+  }, [amountInput, usdInput, amountMode, usdPrice, decimals]);
+
+  const switchAmountMode = useCallback((next: 'usd' | 'token') => {
+    if (next === amountMode) return;
+    if (next === 'usd') {
+      // convert current token amount to usd
+      if (usdPrice && Number(usdPrice) > 0) {
+        const tokens = Number(amountInput || '0');
+        if (isFinite(tokens) && tokens > 0) {
+          const usd = tokens * Number(usdPrice);
+          setUsdInput(usd.toFixed(2));
+        }
+      }
+      setAmountMode('usd');
+    } else {
+      // convert current usd to token
+      if (usdPrice && Number(usdPrice) > 0) {
+        const usdVal = Number(usdInput || '0');
+        if (isFinite(usdVal) && usdVal > 0) {
+          const tokens = usdVal / Number(usdPrice);
+          const precision = Math.min(6, decimals);
+          setAmountInput(tokens.toFixed(precision));
+        }
+      }
+      setAmountMode('token');
+    }
+  }, [amountMode, amountInput, usdInput, usdPrice, decimals]);
+
+  const parsedWithdraw = useMemo(() => {
+    if (!withdrawInput) return BigInt(0);
+    try {
+      return parseUnits(withdrawInput, decimals);
+    } catch {
+      return BigInt(0);
+    }
+  }, [withdrawInput, decimals]);
 
   const potentialTickets = useMemo(() => {
     if (parsedAmount === BigInt(0)) return BigInt(0);
@@ -274,8 +328,8 @@ export default function AppPage() {
 
   const onWithdraw = useCallback(async () => {
     setTxError(null);
-    if (!address || parsedAmount === BigInt(0)) return;
-    if (ticketUnit !== BigInt(0) && parsedAmount % ticketUnit !== BigInt(0)) return;
+    if (!address || parsedWithdraw === BigInt(0)) return;
+    if (ticketUnit !== BigInt(0) && parsedWithdraw % ticketUnit !== BigInt(0)) return;
     setIsSubmitting(true);
     try {
       const primary = wallets && wallets.length > 0 ? wallets[0] : null;
@@ -286,16 +340,16 @@ export default function AppPage() {
         address: contractAddresses.lotteryContract as Address,
         abi: V2_LOTTERY_ABI,
         functionName: "withdraw",
-        args: [parsedAmount],
+        args: [parsedWithdraw],
         account: address as Address,
       });
       const hash = await walletClient.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
-      setAmountInput("");
+      setWithdrawInput("");
     } finally {
       setIsSubmitting(false);
     }
-  }, [address, parsedAmount]);
+  }, [address, parsedWithdraw]);
 
   const currentOdds = useMemo(() => {
     if (totalTickets === BigInt(0)) return "0%";
@@ -313,6 +367,12 @@ export default function AppPage() {
               <div className="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded-md">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </div>
+              <button onClick={() => { setClaimed(false); setDrawOpen(true); }} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
+                Simulate Result
+              </button>
+              <button onClick={() => setInfoOpen(true)} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
+                Show Info
+              </button>
               <button onClick={onDisconnect} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
                 Disconnect
               </button>
@@ -326,68 +386,145 @@ export default function AppPage() {
       </div>
       <div className="w-full px-6 py-8">
         <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2 border p-5 bg-card rounded-xl">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium">Deposit / Withdraw</h3>
-              <Tooltip text="Deposit wHYPE to earn tickets. 1 ticket per 0.1 wHYPE. We auto-wrap HYPE if needed."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+          <div className="md:col-span-3 rounded-xl border border-border bg-gradient-to-br from-[#0f2540] via-[#133a63] to-[#0f2540] p-8 text-white text-center">
+            <div className="flex items-center justify-center gap-3">
+              <h2 className="text-3xl sm:text-4xl font-semibold">Enter the Lottery</h2>
+              <Tooltip text="Deposit wHYPE to enter. 1 ticket per 0.1 wHYPE. We auto-wrap HYPE if needed."><span className="text-xs border rounded px-1.5 py-0.5 border-white/20">?</span></Tooltip>
             </div>
-            <div className="mt-3 space-y-4">
-              <input
-                className="w-full border bg-background px-4 py-3 text-base rounded-lg"
-                placeholder={`Amount in ${symbol}`}
-                value={amountInput}
-                onChange={(e) => {
-                  setAmountInput(e.target.value);
-                  setIsTyping(true);
-                  if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-                  typingTimerRef.current = setTimeout(() => setIsTyping(false), 700);
-                }}
-                inputMode="decimal"
-              />
-              {txError && <div className="text-sm text-red-400">{txError}</div>}
-              <div className="flex gap-3">
-                <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onDeposit} className="px-4 py-2 bg-primary text-primary-foreground disabled:opacity-50 text-sm rounded-md cursor-pointer disabled:cursor-not-allowed">Deposit</button>
-                <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onWithdraw} className="px-4 py-2 bg-destructive text-white disabled:opacity-50 text-sm rounded-md cursor-pointer disabled:cursor-not-allowed">Withdraw</button>
+            <p className="mt-3 text-white/85 text-base">Boost your odds by depositing more. Withdraw anytime.</p>
+            <div className="mt-5 flex flex-col gap-3 items-center">
+              <div className="relative w-full max-w-lg mx-auto">
+                <input
+                  className="w-full border border-white/20 bg-white/10 pl-5 pr-28 py-4 text-lg rounded-lg placeholder:text-white/70"
+                  placeholder={amountMode==='usd' ? 'Amount in USD' : 'Amount in HYPE'}
+                  value={amountMode==='usd' ? usdInput : amountInput}
+                  onChange={(e) => {
+                    if (amountMode==='usd') {
+                      setUsdInput(e.target.value);
+                    } else {
+                      setAmountInput(e.target.value);
+                    }
+                    setIsTyping(true);
+                    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+                    typingTimerRef.current = setTimeout(() => setIsTyping(false), 700);
+                  }}
+                  inputMode="decimal"
+                />
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <div className="inline-flex items-center bg-white/10 border border-white/20 rounded-md p-1 text-xs">
+                    <button onClick={() => switchAmountMode('usd')} className={cn("px-2 py-1 rounded", amountMode==='usd' ? 'bg-white/20' : 'opacity-80')}>USD</button>
+                    <button onClick={() => switchAmountMode('token')} className={cn("px-2 py-1 rounded", amountMode==='token' ? 'bg-white/20' : 'opacity-80')}>HYPE</button>
+                  </div>
+                </div>
               </div>
-              <OddsTicker targetPct={dynamicOddsPct} active={isTyping} />
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Badge label="Balance" value={`${formatToken(tokenBalance, decimals)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(tokenBalance, decimals)) * usdPrice).toFixed(2)})`:''}`} />
-                <Badge label="Your Deposit" value={`${formatToken(userDeposit, decimals)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(userDeposit, decimals)) * usdPrice).toFixed(2)})`:''}`} />
-                <Badge label="Ticket Unit" value={`${formatUnits(ticketUnit, decimals)} ${symbol}`} />
-                <Badge label="Updated" value={`${new Date(lastUpdatedMs).toLocaleTimeString()}`} />
+              {usdPrice !== null && (amountMode==='usd' ? (
+                <div className="text-white/85 text-sm">≈ {formatToken(parsedAmount, decimals)} HYPE</div>
+              ) : (
+                <div className="text-white/85 text-sm">≈ ${((Number(formatToken(parsedAmount, decimals))||0) * (usdPrice||0)).toFixed(2)} USD</div>
+              ))}
+              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0)} onClick={onDeposit} className="w-full max-w-lg mx-auto px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                Enter Lottery
+              </button>
+            </div>
+            {parsedAmount > BigInt(0) && (
+              <div className="mt-4 max-w-xl mx-auto">
+                <OddsTicker targetPct={dynamicOddsPct} active={isTyping} />
               </div>
+            )}
+            <div className="flex flex-wrap gap-3 pt-4 justify-center">
+              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your Deposit: {formatToken(userDeposit, decimals)} {symbol}{usdPrice!==null?` ($${(Number(formatToken(userDeposit, decimals)) * usdPrice).toFixed(2)})`:''}</span>
+              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your tickets: {String(userTickets)} (0.1 HYPE per ticket)</span>
+              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Updated: {new Date(lastUpdatedMs).toLocaleTimeString()}</span>
             </div>
           </div>
-          <div className="border p-5 bg-card rounded-xl">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium">Stats</h3>
-              <Tooltip text="Prize pool grows with harvested yield. Time left is until round end."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+          <div className="md:col-span-3 grid gap-6 md:grid-cols-3">
+            <div className="border p-5 bg-card rounded-xl">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">Stats</h3>
+                <Tooltip text="Prize pool grows with harvested yield. Time left is until round end."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+              </div>
+              <div className="mt-3 grid gap-3">
+                <Stat label="Prize Pool" value={`${formatToken(prizePool, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(prizePool, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
+                <Stat label="Total Tickets" value={String(totalTickets)} />
+                <Stat label="Your Tickets" value={String(userTickets)} />
+                <Stat label="Your Odds" value={currentOdds} />
+                <Stat label="Time Left" value={timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"} />
+              </div>
             </div>
-            <div className="mt-3 grid gap-3">
-              <Stat label="Prize Pool" value={`${formatToken(prizePool, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(prizePool, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
-              <Stat label="Total Tickets" value={String(totalTickets)} />
-              <Stat label="Your Tickets" value={String(userTickets)} />
-              <Stat label="Your Odds" value={currentOdds} />
-              <Stat label="Time Left" value={timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"} />
+            <div className="border p-5 bg-card rounded-xl">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">Live Participants</h3>
+                <Tooltip text="Live participants and odds."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+              </div>
+              <CurrentParticipantsLive totalTickets={totalTickets} symbol={symbol} />
             </div>
-          </div>
-          <div className="md:col-span-3 border p-5 bg-card rounded-xl">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium">Current Round Participants</h3>
-              <Tooltip text="Live participants and odds."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+            <div className="border p-5 bg-card rounded-xl">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">Recent Winners</h3>
+                <Tooltip text="Winners from the last few rounds."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+              </div>
+              <RecentWinners currentRound={currentRound} symbol={symbol} decimals={decimals} />
             </div>
-            <CurrentParticipantsLive totalTickets={totalTickets} symbol={symbol} />
           </div>
 
-          <div className="md:col-span-3 border p-5 bg-card rounded-xl">
-            <div className="flex items-center gap-2">
-              <h3 className="text-base font-medium">Recent Winners</h3>
-              <Tooltip text="Winners from the last few rounds."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+          <div className="md:col-span-3 grid gap-6 md:grid-cols-2">
+            <div className="border p-5 bg-card rounded-xl">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={() => setWithdrawOpen((v) => !v)}
+                aria-expanded={withdrawOpen}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-medium">Withdraw</h3>
+                  <Tooltip text="Withdraw your wHYPE anytime in multiples of the ticket unit."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+                </div>
+                <ChevronDown size={16} className={cn("transition-transform", withdrawOpen ? "rotate-180" : "rotate-0")} />
+              </button>
+              {withdrawOpen && (
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <input
+                    className="w-full border bg-background px-4 py-3 text-base rounded-lg"
+                    placeholder={`Amount in ${symbol}`}
+                    value={withdrawInput}
+                    onChange={(e) => setWithdrawInput(e.target.value)}
+                    inputMode="decimal"
+                  />
+                  <button disabled={!address || isSubmitting || parsedWithdraw === BigInt(0)} onClick={onWithdraw} className="px-6 py-3 bg-destructive text-white rounded-md font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    Withdraw
+                  </button>
+                </div>
+              )}
             </div>
-            <RecentWinners currentRound={currentRound} symbol={symbol} decimals={decimals} />
+
+            <div className="border p-5 bg-card rounded-xl">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-medium">Contract Details</h3>
+                <Tooltip text="Links to explorer for verification."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                <ContractLink label="Lottery" address={contractAddresses.lotteryContract} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
+      {drawOpen && (
+        <DrawModal
+          onClose={() => setDrawOpen(false)}
+          onClaim={async () => { setClaiming(true); await new Promise(r=>setTimeout(r,1200)); setClaiming(false); setClaimed(true); }}
+          claiming={claiming}
+          claimed={claimed}
+          prize={prizePool > BigInt(0) ? prizePool : BigInt(100000000000000000)}
+          symbol={symbol}
+          decimals={decimals}
+          usdPrice={usdPrice}
+          yourAddress={address as string}
+        />
+      )}
+      {infoOpen && (
+        <InfoModal onClose={() => setInfoOpen(false)} />
+      )}
     </div>
   );
 }
@@ -397,6 +534,179 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="border border-border bg-card rounded-xl px-4 py-3">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="text-lg font-medium mt-1">{value}</div>
+    </div>
+  );
+}
+
+function ContractLink({ label, address }: { label: string; address: string }) {
+  const explorer = 'https://hyperevmscan.io';
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <a className="underline underline-offset-2" href={`${explorer}/address/${address}`} target="_blank" rel="noreferrer">
+        {address.slice(0,6)}...{address.slice(-4)}
+      </a>
+    </div>
+  );
+}
+
+function InfoModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="pointer-events-none absolute -top-20 -left-20 h-60 w-60 rounded-full bg-primary/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -right-24 h-60 w-60 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative bg-gradient-to-r from-primary/30 via-primary/20 to-transparent px-6 py-5 border-b border-border">
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <h3 className="text-2xl font-semibold">You’re in! Here’s what happens next</h3>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">Sit back and watch your odds rise as yield grows the prize.</p>
+        </div>
+        <div className="p-6 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-border bg-background/60 p-4">
+            <div className="flex items-center gap-2 text-primary"><Coins className="h-4 w-4"/><span className="text-xs uppercase tracking-wide">Yield</span></div>
+            <div className="mt-2 text-sm text-muted-foreground">Your deposit earns yield continuously. We don’t risk principal.</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-4">
+            <div className="flex items-center gap-2 text-primary"><Gift className="h-4 w-4"/><span className="text-xs uppercase tracking-wide">Prize Pool</span></div>
+            <div className="mt-2 text-sm text-muted-foreground">Yield is harvested into the prize pool at intervals.</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-4">
+            <div className="flex items-center gap-2 text-primary"><Ticket className="h-4 w-4"/><span className="text-xs uppercase tracking-wide">Draw</span></div>
+            <div className="mt-2 text-sm text-muted-foreground">At round end, a winner is selected proportionally to tickets.</div>
+          </div>
+        </div>
+        
+        <div className="p-6 pt-2 flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 rounded-md border border-border hover:bg-secondary">Got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DrawModal({ onClose, onClaim, claiming, claimed, prize, symbol, decimals, usdPrice, yourAddress }:
+  { onClose: () => void; onClaim: () => void | Promise<void>; claiming: boolean; claimed: boolean; prize: bigint; symbol: string; decimals: number; usdPrice: number | null; yourAddress: string }) {
+  const [phase, setPhase] = useState<'spinning' | 'reveal' | 'won'>("spinning");
+  const [displayAddr, setDisplayAddr] = useState<string>("0x????????????????????????????????????????");
+  useEffect(() => {
+    // Spin: rapidly shuffle addresses, then reveal user's address
+    let stop = false;
+    const candidates = [
+      "0x2F3A...B1C2",
+      "0x8B4C...9A77",
+      "0xDEAD...BEEF",
+      "0xCAFE...BABE",
+      `${yourAddress?.slice(0,6)}...${yourAddress?.slice(-4)}`,
+    ];
+    let i = 0;
+    const spin = () => {
+      if (stop) return;
+      setDisplayAddr(candidates[i % candidates.length]);
+      i++;
+      requestAnimationFrame(spin);
+    };
+    const id = requestAnimationFrame(spin);
+    const t = setTimeout(() => {
+      stop = true;
+      cancelAnimationFrame(id);
+      setPhase("reveal");
+      setTimeout(() => setPhase("won"), 900);
+    }, 1800);
+    return () => {
+      cancelAnimationFrame(id);
+      clearTimeout(t);
+    };
+  }, [yourAddress]);
+
+  return (
+    <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4">
+      <div className="relative w-full max-w-lg rounded-xl border border-border bg-card p-6 overflow-hidden">
+        {phase === 'won' && <ConfettiBurst />}
+        <h3 className="text-xl font-semibold">Lottery draw in progress…</h3>
+        <p className="mt-2 text-sm text-muted-foreground">Selecting a winner fairly from all tickets.</p>
+        <div className="mt-5">
+          <SpinnerStrip active={phase === 'spinning'} />
+          <div className="mt-3 text-center text-2xl font-mono tracking-wider">{displayAddr}</div>
+        </div>
+        {phase !== 'won' ? (
+          <div className="mt-5 flex justify-center">
+            <button onClick={onClose} className="px-4 py-2 rounded-md border border-border hover:bg-secondary">Cancel</button>
+          </div>
+        ) : (
+          <div className="mt-6">
+            <h4 className="text-lg font-semibold">🎉 You won!</h4>
+            <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Prize</span>
+                <span className="font-medium">{formatToken(prize, decimals)} {symbol}{usdPrice!==null?` ($${(Number(formatToken(prize, decimals)) * usdPrice).toFixed(2)})`:''}</span>
+              </div>
+            </div>
+            <div className="mt-5 flex gap-3 justify-center">
+              {!claimed ? (
+                <button onClick={onClaim} disabled={claiming} className="px-4 py-2 bg-primary text-primary-foreground rounded-md cursor-pointer disabled:opacity-60">
+                  {claiming ? 'Claiming…' : 'Claim Prize'}
+                </button>
+              ) : (
+                <div className="px-4 py-2 rounded-md bg-green-600/80 text-white">Claimed! 🎊</div>
+              )}
+              <button onClick={onClose} className="px-4 py-2 rounded-md border border-border hover:bg-secondary">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SpinnerStrip({ active }: { active: boolean }) {
+  const bars = new Array(24).fill(0);
+  return (
+    <div className="relative h-14 w-full overflow-hidden rounded bg-background/60 border border-border">
+      <div className="absolute inset-0 grid grid-cols-24 gap-1 px-2 py-2 opacity-80">
+        {bars.map((_, i) => (
+          <span
+            key={i}
+            className="block w-full bg-primary/60"
+            style={{ height: `${active ? (Math.sin((Date.now()/120 + i) * 0.6) * 35 + 45) : 45}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConfettiBurst() {
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGo(true), 50);
+    return () => clearTimeout(t);
+  }, []);
+  const pieces = Array.from({ length: 24 });
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {pieces.map((_, i) => {
+        const left = Math.random() * 100;
+        const delay = Math.random() * 300;
+        const size = 6 + Math.random() * 8;
+        const hue = Math.floor(Math.random() * 360);
+        return (
+          <span
+            key={i}
+            className="absolute rounded-sm"
+            style={{
+              left: `${left}%`,
+              top: '-10px',
+              width: `${size}px`,
+              height: `${size}px`,
+              backgroundColor: `hsl(${hue} 90% 60%)`,
+              transform: `translateY(${go ? '140%' : '-20%'}) rotate(${go ? 360 : 0}deg)`,
+              transition: `transform 1200ms cubic-bezier(.2,.8,.2,1) ${delay}ms`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
