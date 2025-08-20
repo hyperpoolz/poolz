@@ -90,6 +90,7 @@ export default function AppPage() {
   >(null);
   const [devSimEnd, setDevSimEnd] = useState<boolean>(false);
   const [currentBlock, setCurrentBlock] = useState<bigint>(BigInt(0));
+  const [connectedChainId, setConnectedChainId] = useState<number | null>(null);
 
   const { login, logout, ready, authenticated } = usePrivy() as any;
   const {
@@ -138,6 +139,16 @@ export default function AppPage() {
         if (!client) return;
         const [addr] = await client.requestAddresses();
         setAddress(addr as Address);
+        try {
+          const hexId = await provider.request({ method: 'eth_chainId' } as any);
+          const id = typeof hexId === 'string' ? parseInt(hexId, 16) : Number(hexId);
+          if (!Number.isNaN(id)) setConnectedChainId(id);
+          if (typeof (provider as any).on === 'function') {
+            (provider as any).on('chainChanged', (cid: string) => {
+              try { setConnectedChainId(parseInt(cid, 16)); } catch { /* noop */ }
+            });
+          }
+        } catch {}
       } catch {}
     })();
   }, [authenticated, walletsReady, wallets]);
@@ -463,9 +474,27 @@ export default function AppPage() {
 
   const onDeposit = useCallback(async () => {
     setTxError(null);
-    if (!address || parsedAmount === BigInt(0)) return;
-    if (ticketUnit !== BigInt(0) && parsedAmount % ticketUnit !== BigInt(0))
+    if (!address) {
+      setTxError("Please connect your wallet to deposit.");
+      try { if (typeof window !== 'undefined') window.alert('Please connect your wallet to deposit.'); } catch {}
       return;
+    }
+    if (parsedAmount === BigInt(0)) {
+      setTxError("Enter a valid amount to deposit.");
+      try { if (typeof window !== 'undefined') window.alert('Enter a valid amount to deposit.'); } catch {}
+      return;
+    }
+    if (ticketUnit !== BigInt(0) && parsedAmount % ticketUnit !== BigInt(0)) {
+      const unitStr = formatToken(ticketUnit, decimals);
+      setTxError(`Amount must be a multiple of the ticket unit (${unitStr}).`);
+      try { if (typeof window !== 'undefined') window.alert(`Amount must be a multiple of the ticket unit (${unitStr}).`); } catch {}
+      return;
+    }
+    if (!demoMode && !(roundState === 0 && !(devSimEnd || timeLeft <= 0))) {
+      setTxError("Deposits are disabled for the current round.");
+      try { if (typeof window !== 'undefined') window.alert('Deposits are disabled for the current round.'); } catch {}
+      return;
+    }
     setIsSubmitting(true);
     try {
       const primary = wallets && wallets.length > 0 ? wallets[0] : null;
@@ -534,7 +563,7 @@ export default function AppPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [address, parsedAmount, ticketUnit, wallets, refreshUser, refreshRound]);
+  }, [address, parsedAmount, ticketUnit, decimals, demoMode, roundState, devSimEnd, timeLeft, wallets, refreshUser, refreshRound]);
 
   const onWithdraw = useCallback(async () => {
     setTxError(null);
@@ -672,6 +701,43 @@ export default function AppPage() {
     const pct = Number(userTickets) / Number(totalTickets);
     return `${(pct * 100).toFixed(2)}%`;
   }, [totalTickets, userTickets]);
+
+  const isOnHyperEVM = useMemo(() => {
+    return connectedChainId === NETWORKS.hyperEVM.chainId;
+  }, [connectedChainId]);
+
+  const onSwitchHyperEVM = useCallback(async () => {
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      if (!provider) return;
+      const chainIdHex = '0x' + NETWORKS.hyperEVM.chainId.toString(16);
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] } as any);
+    } catch (e) {
+      // ignore; user may reject
+    }
+  }, [wallets]);
+
+  const onAddHyperEVM = useCallback(async () => {
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      if (!provider) return;
+      const chainIdHex = '0x' + NETWORKS.hyperEVM.chainId.toString(16);
+      await provider.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: chainIdHex,
+          chainName: NETWORKS.hyperEVM.name,
+          nativeCurrency: NETWORKS.hyperEVM.nativeCurrency,
+          rpcUrls: [NETWORKS.hyperEVM.rpcUrl],
+          blockExplorerUrls: NETWORKS.hyperEVM.blockExplorer ? [NETWORKS.hyperEVM.blockExplorer] : [],
+        }],
+      } as any);
+    } catch (e) {
+      // ignore; user may reject
+    }
+  }, [wallets]);
 
   const blocksUntilDraw = useMemo(() => {
     if (
@@ -921,6 +987,20 @@ export default function AppPage() {
       </div>
       <div className="w-full px-6 py-8">
         <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3">
+          {/* Network warning */}
+          {!isOnHyperEVM && address && (
+            <div className="md:col-span-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="text-sm">
+                  You are connected to chain ID {connectedChainId ?? 'unknown'}. Please switch to {NETWORKS.hyperEVM.name} (chain ID {NETWORKS.hyperEVM.chainId}).
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={onSwitchHyperEVM} className="px-3 py-1.5 rounded-md border border-border hover:bg-secondary text-sm">Switch to {NETWORKS.hyperEVM.name}</button>
+                  <button onClick={onAddHyperEVM} className="px-3 py-1.5 rounded-md border border-border hover:bg-secondary text-sm">Add Network</button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="md:col-span-3 rounded-xl border border-border bg-gradient-to-br from-[#0f2540] via-[#133a63] to-[#0f2540] p-8 text-white text-center">
             <div className="flex items-center justify-center gap-3">
               <h2 className="text-3xl sm:text-4xl font-semibold">

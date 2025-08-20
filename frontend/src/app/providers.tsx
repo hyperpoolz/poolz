@@ -1,5 +1,6 @@
 "use client";
 
+import { hyperEVMChain } from "@/lib/wallet";
 import { PrivyProvider } from "@privy-io/react-auth";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
@@ -14,6 +15,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         embeddedWallets: {
           createOnLogin: "users-without-wallets",
         },
+        supportedChains: [hyperEVMChain],
       }}
     >
       {children}
@@ -22,5 +24,3 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <>{children}</>
   );
 }
-
-
