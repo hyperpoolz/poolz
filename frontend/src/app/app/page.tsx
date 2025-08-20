@@ -1415,13 +1415,13 @@ export default function AppPage() {
                   <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 flex items-center justify-between">
                     <div className="text-sm">
                       🎉 You won round {String(lastFinalizedRound)}! Prize:{" "}
-                      {formatToken(lastPrize, decimals)} {symbol}
+                      {formatToken(lastPrize, decimals)} {symbol}. The prize has been sent to your wallet.
                     </div>
                     <button
                       onClick={() => setAcknowledgedWin(true)}
-                      className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm"
+                      className="px-3 py-1.5 rounded-md border border-border hover:bg-secondary text-sm"
                     >
-                      Claim Prize
+                      Dismiss
                     </button>
                   </div>
                 )}
@@ -1860,28 +1860,12 @@ function DrawModal({
                 </span>
               </div>
             </div>
-            <div className="mt-5 flex gap-3 justify-center">
-              {winnerAddress &&
-              yourAddress &&
-              winnerAddress.toLowerCase() === yourAddress.toLowerCase() ? (
-                !claimed ? (
-                  <button
-                    onClick={onClaim}
-                    disabled={claiming}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md cursor-pointer disabled:opacity-60"
-                  >
-                    {claiming ? "Claiming…" : "Claim Prize"}
-                  </button>
-                ) : (
-                  <div className="px-4 py-2 rounded-md bg-green-600/80 text-white">
-                    Claimed! 🎊
-                  </div>
-                )
-              ) : (
-                <div className="px-4 py-2 rounded-md border border-border text-muted-foreground">
-                  Better luck next time!
-                </div>
-              )}
+            <div className="mt-5 flex flex-col sm:flex-row gap-3 justify-center items-center">
+              <div className="px-4 py-2 rounded-md border border-border text-sm">
+                {winnerAddress && yourAddress && winnerAddress.toLowerCase() === yourAddress.toLowerCase()
+                  ? 'Prize has been sent to your wallet.'
+                  : 'Prize has been sent to the winner.'}
+              </div>
               <button
                 onClick={onClose}
                 className="px-4 py-2 rounded-md border border-border hover:bg-secondary"
