@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseUnits, formatUnits } from "viem";
 import { formatToken } from "@/lib/wallet";
 import { fetchTokenPriceUsd, cn } from "@/lib/utils";
+import { NETWORKS } from "@/lib/chains";
 import { 
   Ticket, 
   Coins, 
@@ -65,12 +66,33 @@ export default function V2Page() {
   const [withdrawAmount, setWithdrawAmount] = useState<string>("");
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [usdPrice, setUsdPrice] = useState<number | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
 
   // Load USD price
   useEffect(() => {
     fetchTokenPriceUsd("hyperliquid")
       .then(setUsdPrice)
       .catch(() => setUsdPrice(null));
+  }, []);
+
+  // Detect network (wallet) and subscribe to changes
+  useEffect(() => {
+    const eth = (typeof window !== 'undefined' && (window as any).ethereum) || null;
+    if (!eth) return;
+    (async () => {
+      try {
+        const cid = await eth.request({ method: 'eth_chainId' });
+        const n = typeof cid === 'string' ? parseInt(cid, 16) : Number(cid);
+        if (!Number.isNaN(n)) setChainId(n);
+      } catch {}
+    })();
+    const onChanged = (cid: string) => {
+      try { setChainId(parseInt(cid, 16)); } catch {}
+    };
+    try { eth.on && eth.on('chainChanged', onChanged); } catch {}
+    return () => {
+      try { eth.removeListener && eth.removeListener('chainChanged', onChanged); } catch {}
+    };
   }, []);
 
   // Clear action errors automatically
@@ -137,6 +159,34 @@ export default function V2Page() {
       // Error handled by useLotteryActions hook
     }
   }, [address, parsedWithdrawAmount, ticketUnit, actions]);
+
+  // Switch/Add HyperEVM convenience
+  const ensureHyperEvm = useCallback(async () => {
+    const eth = (typeof window !== 'undefined' && (window as any).ethereum) || null;
+    if (!eth) return;
+    const chainIdHex = '0x' + NETWORKS.hyperEVM.chainId.toString(16);
+    try {
+      await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] });
+    } catch (err: any) {
+      const code = typeof err?.code === 'number' ? err.code : undefined;
+      const msg = String(err?.message || '').toLowerCase();
+      if (code === 4902 || msg.includes('unrecognized chain') || msg.includes('add ethereum chain')) {
+        try {
+          await eth.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: chainIdHex,
+              chainName: NETWORKS.hyperEVM.name,
+              nativeCurrency: NETWORKS.hyperEVM.nativeCurrency,
+              rpcUrls: [NETWORKS.hyperEVM.rpcUrl],
+              blockExplorerUrls: NETWORKS.hyperEVM.blockExplorer ? [NETWORKS.hyperEVM.blockExplorer] : [],
+            }]
+          });
+          await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] });
+        } catch {}
+      }
+    }
+  }, []);
 
   // Utility functions
   const formatUsd = (amount: bigint) => {
@@ -232,6 +282,14 @@ export default function V2Page() {
                   <div className="text-sm bg-secondary px-3 py-2 rounded-lg">
                     {address.slice(0, 6)}...{address.slice(-4)}
                   </div>
+                  {chainId !== NETWORKS.hyperEVM.chainId && (
+                    <button
+                      onClick={ensureHyperEvm}
+                      className="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-3 py-2 rounded-lg transition-colors"
+                    >
+                      Switch to {NETWORKS.hyperEVM.name}
+                    </button>
+                  )}
                   <button
                     onClick={disconnect}
                     className="text-sm bg-destructive/20 hover:bg-destructive/30 text-destructive px-3 py-2 rounded-lg transition-colors"
