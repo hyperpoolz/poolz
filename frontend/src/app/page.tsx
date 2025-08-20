@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { memo } from "react";
+import { HyperPoolLogo } from "./components/HyperPoolLogo";
 
 export default function Landing() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="w-full border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="text-xl font-semibold">HyperPool</div>
+          <div className="flex items-center space-x-3">
+            <HyperPoolLogo size={28} />
+            <div className="text-xl font-semibold">HyperPool</div>
+          </div>
           <Link href="/app" className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:opacity-90 text-sm">
             Launch App
           </Link>

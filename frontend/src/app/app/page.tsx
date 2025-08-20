@@ -25,6 +25,7 @@ import { useWallet } from "./hooks/useWallet";
 import { useLotteryActions } from "./hooks/useLotteryActions";
 import { useHarvestSequence } from "./hooks/useHarvestSequence";
 import { HarvestLockedPopup } from "./components/HarvestLockedPopup";
+import { HyperPoolLogo } from "../components/HyperPoolLogo";
 
 // Types for cleaner code organization
 interface RoundInfo {
@@ -311,10 +312,8 @@ export default function V2Page() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                  <Ticket className="w-5 h-5 text-primary-foreground" />
-                </div>
+              <div className="flex items-center space-x-3">
+                <HyperPoolLogo size={36} />
                 <h1 className="text-2xl font-bold text-primary">
                   HyperPool
                 </h1>
