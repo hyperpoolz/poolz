@@ -37,6 +37,28 @@ export default function AppPage() {
   const [claimed, setClaimed] = useState<boolean>(false);
   const [withdrawOpen, setWithdrawOpen] = useState<boolean>(false);
   const [infoOpen, setInfoOpen] = useState<boolean>(false);
+  const [debugOpen, setDebugOpen] = useState<boolean>(false);
+  const [debugLoading, setDebugLoading] = useState<boolean>(false);
+  const [debugJson, setDebugJson] = useState<string>("");
+  const [drawing, setDrawing] = useState<boolean>(false);
+  const [drawWinner, setDrawWinner] = useState<string | null>(null);
+  const [drawPrize, setDrawPrize] = useState<bigint>(BigInt(0));
+  const [lastWinner, setLastWinner] = useState<string | null>(null);
+  const [lastPrize, setLastPrize] = useState<bigint>(BigInt(0));
+  const [lastFinalizedRound, setLastFinalizedRound] = useState<bigint>(BigInt(0));
+  const [acknowledgedWin, setAcknowledgedWin] = useState<boolean>(false);
+  const [incentiveBps, setIncentiveBps] = useState<number>(0);
+  const [demoMode, setDemoMode] = useState<boolean>(false);
+  const [demoCurrentRound, setDemoCurrentRound] = useState<bigint>(BigInt(1));
+  const [demoTimeLeft, setDemoTimeLeft] = useState<number>(3600);
+  const [demoRoundState, setDemoRoundState] = useState<number>(0); // 0 Active, 1 Closed, 2 Finalized
+  const [demoPrizePool, setDemoPrizePool] = useState<bigint>(BigInt(0));
+  const [demoTotalTickets, setDemoTotalTickets] = useState<bigint>(BigInt(0));
+  const [demoUserDeposit, setDemoUserDeposit] = useState<bigint>(BigInt(0));
+  const [demoUserTickets, setDemoUserTickets] = useState<bigint>(BigInt(0));
+  const [demoParticipants, setDemoParticipants] = useState<Array<{ addr: string; tickets: bigint }>>([]);
+  const [demoCanClose, setDemoCanClose] = useState<boolean>(false);
+  const [demoCanFinalize, setDemoCanFinalize] = useState<boolean>(false);
   const [canCloseRound, setCanCloseRound] = useState<boolean>(false);
   const [canFinalizeRound, setCanFinalizeRound] = useState<boolean>(false);
   const [roundState, setRoundState] = useState<number>(0); // 0=Active,1=Closed,2=Finalized
@@ -112,6 +134,20 @@ export default function AppPage() {
     loadToken();
   }, []);
 
+  useEffect(() => {
+    // Load incentive bps once
+    (async () => {
+      try {
+        const bps = (await publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "INCENTIVE_BPS",
+        })) as bigint;
+        setIncentiveBps(Number(bps));
+      } catch {}
+    })();
+  }, []);
+
   // Fetch USD price once (replace coingecko id if needed)
   useEffect(() => {
     fetchTokenPriceUsd("hyperliquid")
@@ -164,6 +200,22 @@ export default function AppPage() {
           setDrawBlock((roundData?.[1] as bigint) ?? BigInt(0));
           setRoundState(Number(roundData?.[5] ?? 0));
         } catch {}
+        try {
+          if (roundId > BigInt(1)) {
+            const prev = (await publicClient.readContract({
+              address: contractAddresses.lotteryContract as Address,
+              abi: V2_LOTTERY_ABI,
+              functionName: "getRoundInfo",
+              args: [roundId - BigInt(1)],
+            })) as [bigint, bigint, bigint, bigint, string, number];
+            const prevState = Number(prev[5] || 0);
+            if (prevState === 2) {
+              setLastFinalizedRound(roundId - BigInt(1));
+              setLastWinner(prev[4]);
+              setLastPrize(prev[3]);
+            }
+          }
+        } catch {}
         setLastUpdatedMs(Date.now());
       } catch {}
     }
@@ -210,6 +262,22 @@ export default function AppPage() {
       try {
         setDrawBlock((roundData?.[1] as bigint) ?? BigInt(0));
         setRoundState(Number(roundData?.[5] ?? 0));
+      } catch {}
+      try {
+        if (roundId > BigInt(1)) {
+          const prev = (await publicClient.readContract({
+            address: contractAddresses.lotteryContract as Address,
+            abi: V2_LOTTERY_ABI,
+            functionName: "getRoundInfo",
+            args: [roundId - BigInt(1)],
+          })) as [bigint, bigint, bigint, bigint, string, number];
+          const prevState = Number(prev[5] || 0);
+          if (prevState === 2) {
+            setLastFinalizedRound(roundId - BigInt(1));
+            setLastWinner(prev[4]);
+            setLastPrize(prev[3]);
+          }
+        }
       } catch {}
       setLastUpdatedMs(Date.now());
     } catch {}
@@ -489,6 +557,57 @@ export default function AppPage() {
         args: [],
         account: address as Address,
       });
+      setDrawWinner(null);
+      setDrawPrize(BigInt(0));
+      setDrawing(true);
+      setDrawOpen(true);
+      const hash = await walletClient.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      await refreshRound();
+      // After finalize, winner/prize belong to previous round (currentRound-1)
+      try {
+        const info = (await publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "getRoundInfo",
+          args: [currentRound],
+        })) as [bigint, bigint, bigint, bigint, string, number];
+        // If finalize just happened, currentRound may have been incremented – fetch previous
+        const prevInfo = (await publicClient.readContract({
+          address: contractAddresses.lotteryContract as Address,
+          abi: V2_LOTTERY_ABI,
+          functionName: "getRoundInfo",
+          args: [info ? currentRound : currentRound - BigInt(1)],
+        })) as [bigint, bigint, bigint, bigint, string, number];
+        const winnerAddr = prevInfo[4];
+        const prizeAmt = prevInfo[3];
+        setDrawWinner(winnerAddr);
+        setDrawPrize(prizeAmt);
+      } catch {}
+    } catch (err: any) {
+      setTxError(err?.shortMessage || err?.message || 'Transaction failed');
+    } finally {
+      setActionBusy(null);
+      setDrawing(false);
+    }
+  }, [address, wallets, refreshRound]);
+
+  const onHarvestYield = useCallback(async () => {
+    if (!address) return;
+    setTxError(null);
+    setActionBusy('close'); // reuse busy flag styling
+    try {
+      const primary = wallets && wallets.length > 0 ? wallets[0] : null;
+      const provider = primary ? await primary.getEthereumProvider() : null;
+      const walletClient = await getWalletClientFromEIP1193(provider);
+      if (!walletClient) throw new Error("No wallet");
+      const { request } = await publicClient.simulateContract({
+        address: contractAddresses.lotteryContract as Address,
+        abi: V2_LOTTERY_ABI,
+        functionName: "harvestYield",
+        args: [],
+        account: address as Address,
+      });
       const hash = await walletClient.writeContract(request);
       await publicClient.waitForTransactionReceipt({ hash });
       await refreshRound();
@@ -505,6 +624,104 @@ export default function AppPage() {
     return `${(pct * 100).toFixed(2)}%`;
   }, [totalTickets, userTickets]);
 
+  const loadDebug = useCallback(async () => {
+    setDebugLoading(true);
+    try {
+      const [blockNumber, roundInfo, ticketUnit, lotInt, harvInt, drawDelay, incBps, totDeps, pPool, lastHarv, curRound, totTix] = await Promise.all([
+        publicClient.getBlockNumber(),
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "getCurrentRoundInfo" }) as Promise<[bigint, bigint, boolean, boolean]>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "TICKET_UNIT" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "LOTTERY_INTERVAL" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "HARVEST_INTERVAL" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "DRAW_BLOCKS_DELAY" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "INCENTIVE_BPS" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "totalDeposits" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "prizePool" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "lastHarvestTime" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "currentRound" }) as Promise<bigint>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "totalTickets" }) as Promise<bigint>,
+      ]);
+      const roundId = roundInfo[0];
+      const [roundData, curRoundInfo] = await Promise.all([
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "getRoundInfo", args: [roundId] }) as Promise<[bigint, bigint, bigint, bigint, string, number]>,
+        publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "rounds", args: [roundId] }) as Promise<any>,
+      ]);
+      const participantsArr: Array<{ addr: string; tickets: string }> = [];
+      for (let i = 0; i < 200; i++) {
+        try {
+          const addr = (await publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "participants", args: [BigInt(i)] })) as Address;
+          if (!addr || addr === "0x0000000000000000000000000000000000000000") break;
+          const tix = (await publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "tickets", args: [addr] })) as bigint;
+          if (tix > BigInt(0)) participantsArr.push({ addr, tickets: tix.toString() });
+        } catch { break; }
+      }
+      let userDep: bigint | null = null; let userTix: bigint | null = null; let userBal: bigint | null = null;
+      if (address) {
+        try {
+          const userInfo = (await publicClient.readContract({ address: contractAddresses.lotteryContract as Address, abi: V2_LOTTERY_ABI, functionName: "getUserInfo", args: [address as Address] })) as [bigint, bigint];
+          userDep = userInfo[0]; userTix = userInfo[1];
+          userBal = (await publicClient.readContract({ address: contractAddresses.depositToken as Address, abi: ERC20_ABI, functionName: "balanceOf", args: [address as Address] })) as bigint;
+        } catch {}
+      }
+      const dbg = {
+        network: NETWORKS.hyperEVM.name,
+        chainId: NETWORKS.hyperEVM.chainId,
+        blockNumber: blockNumber.toString(),
+        addresses: { ...contractAddresses },
+        token: { symbol, decimals },
+        constants: {
+          TICKET_UNIT: ticketUnit.toString(),
+          LOTTERY_INTERVAL: lotInt.toString(),
+          HARVEST_INTERVAL: harvInt.toString(),
+          DRAW_BLOCKS_DELAY: drawDelay.toString(),
+          INCENTIVE_BPS: incBps.toString(),
+        },
+        state: {
+          totalDeposits: totDeps.toString(),
+          prizePool: pPool.toString(),
+          lastHarvestTime: lastHarv.toString(),
+          currentRound: curRound.toString(),
+          totalTickets: totTix.toString(),
+        },
+        currentRound: {
+          roundId: roundId.toString(),
+          timeLeft: roundInfo[1].toString(),
+          canClose: roundInfo[2],
+          canFinalize: roundInfo[3],
+          getRoundInfo: {
+            endTime: roundData[0].toString(),
+            drawBlock: roundData[1].toString(),
+            roundTotalTickets: roundData[2].toString(),
+            prize: roundData[3].toString(),
+            winner: roundData[4],
+            state: roundData[5],
+          },
+          rawRoundsSlot: {
+            drawBlock: (curRoundInfo?.[1] ?? 0).toString(),
+            state: Number(curRoundInfo?.[5] ?? 0),
+          },
+        },
+        lastFinalized: lastWinner ? { round: lastFinalizedRound.toString(), winner: lastWinner, prize: lastPrize.toString() } : null,
+        participants: {
+          count: participantsArr.length,
+          list: participantsArr,
+        },
+        user: address ? {
+          address,
+          deposit: userDep ? userDep.toString() : null,
+          tickets: userTix ? userTix.toString() : null,
+          tokenBalance: userBal ? userBal.toString() : null,
+        } : null,
+      };
+      const replacer = (_k: string, v: any) => (typeof v === 'bigint' ? v.toString() : v);
+      setDebugJson(JSON.stringify(dbg, replacer, 2));
+    } catch (e) {
+      setDebugJson(`{"error":"Failed to load debug state"}`);
+    } finally {
+      setDebugLoading(false);
+    }
+  }, [address, symbol, decimals, lastWinner, lastPrize, lastFinalizedRound]);
+
   return (
     <div className="min-h-screen w-full font-sans bg-background text-foreground">
       <div className="w-full border-b border-border">
@@ -515,10 +732,13 @@ export default function AppPage() {
               <div className="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded-md">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </div>
+              <button onClick={() => setDemoMode((v)=>!v)} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
+                {demoMode ? 'Exit Demo' : 'Enter Demo'}
+              </button>
               <button onClick={() => setDevSimEnd((v) => !v)} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
                 {devSimEnd ? 'Reset Sim' : 'Simulate Round End'}
               </button>
-              <button onClick={() => { setClaimed(false); setDrawOpen(true); }} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
+              <button onClick={() => { setClaimed(false); setDrawWinner(address as string); setDrawPrize(demoMode ? demoPrizePool : prizePool); setDrawOpen(true); }} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
                 Simulate Result
               </button>
               <button onClick={() => setInfoOpen(true)} className="text-xs px-2 py-1 rounded-md border border-border hover:bg-secondary cursor-pointer">
@@ -539,7 +759,7 @@ export default function AppPage() {
         <div className="max-w-6xl mx-auto grid gap-6 md:grid-cols-3">
           <div className="md:col-span-3 rounded-xl border border-border bg-gradient-to-br from-[#0f2540] via-[#133a63] to-[#0f2540] p-8 text-white text-center">
             <div className="flex items-center justify-center gap-3">
-              <h2 className="text-3xl sm:text-4xl font-semibold">Enter the Lottery</h2>
+              <h2 className="text-3xl sm:text-4xl font-semibold">Enter the Lottery{demoMode ? ' (Demo)' : ''}</h2>
               <Tooltip text="Deposit wHYPE to enter. 1 ticket per 0.1 wHYPE. We auto-wrap HYPE if needed."><span className="text-xs border rounded px-1.5 py-0.5 border-white/20">?</span></Tooltip>
             </div>
             <p className="mt-3 text-white/85 text-base">Boost your odds by depositing more. Withdraw anytime.</p>
@@ -573,7 +793,25 @@ export default function AppPage() {
               ) : (
                 <div className="text-white/85 text-sm">≈ ${((Number(formatToken(parsedAmount, decimals))||0) * (usdPrice||0)).toFixed(2)} USD</div>
               ))}
-              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0) || !(roundState === 0 && !(devSimEnd || timeLeft <= 0))} onClick={onDeposit} className="w-full max-w-lg mx-auto px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+              <button disabled={!address || isSubmitting || parsedAmount === BigInt(0) || (!demoMode && !(roundState === 0 && !(devSimEnd || timeLeft <= 0)))} onClick={async () => {
+                if (demoMode) {
+                  // Simulate a deposit into demo state
+                  const add = parsedAmount;
+                  setDemoUserDeposit((v)=>v+add);
+                  const newTix = add / ticketUnit;
+                  setDemoUserTickets((v)=>v+newTix);
+                  setDemoTotalTickets((v)=>v+newTix);
+                  setDemoPrizePool((v)=>v + (add/BigInt(100))); // fake 1% prize growth
+                  if (address) setDemoParticipants((arr)=>{
+                    const idx = arr.findIndex(p=>p.addr.toLowerCase() === (address as string).toLowerCase());
+                    if (idx >= 0) { const copy=[...arr]; copy[idx]={...copy[idx], tickets: copy[idx].tickets + newTix}; return copy; }
+                    return [...arr, { addr: address as string, tickets: newTix }];
+                  });
+                  setAmountInput(''); setUsdInput(''); setInfoOpen(true);
+                } else {
+                  await onDeposit();
+                }
+              }} className="w-full max-w-lg mx-auto px-8 py-4 bg-primary text-primary-foreground rounded-lg font-semibold text-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                 Enter Lottery
               </button>
               {roundState !== 0 || devSimEnd || timeLeft <= 0 ? (
@@ -588,8 +826,8 @@ export default function AppPage() {
               </div>
             )}
             <div className="flex flex-wrap gap-3 pt-4 justify-center">
-              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your Deposit: {formatToken(userDeposit, decimals)} {symbol}{usdPrice!==null?` ($${(Number(formatToken(userDeposit, decimals)) * usdPrice).toFixed(2)})`:''}</span>
-              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your tickets: {String(userTickets)} (0.1 HYPE per ticket)</span>
+              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your Deposit: {formatToken(demoMode ? demoUserDeposit : userDeposit, decimals)} {symbol}{usdPrice!==null?` ($${(Number(formatToken(demoMode ? demoUserDeposit : userDeposit, decimals)) * usdPrice).toFixed(2)})`:''}</span>
+              <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Your tickets: {String(demoMode ? demoUserTickets : userTickets)} (0.1 HYPE per ticket)</span>
               <span className="text-sm bg-white/10 border border-white/15 rounded px-3 py-1.5">Updated: {new Date(lastUpdatedMs).toLocaleTimeString()}</span>
             </div>
           </div>
@@ -600,43 +838,108 @@ export default function AppPage() {
                 <Tooltip text="Prize pool grows with harvested yield. Time left is until round end."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
               </div>
               <div className="mt-3 grid gap-3">
-                <Stat label="Round Status" value={`${roundState === 0 ? ((devSimEnd || timeLeft <= 0) ? (canCloseRound ? 'Ended — Ready to Close' : 'Ended') : 'Open') : (roundState === 1 ? (canFinalizeRound ? 'Closed — Ready to Finalize' : 'Closed — Awaiting Draw Block') : 'Finalized')}`} />
-                <Stat label="Prize Pool" value={`${formatToken(prizePool, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(prizePool, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
-                <Stat label="Your Deposit" value={`${formatToken(userDeposit, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(userDeposit, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
-                <Stat label="Total Tickets" value={String(totalTickets)} />
-                <Stat label="Your Tickets" value={String(userTickets)} />
-                <Stat label="Your Odds" value={currentOdds} />
-                <Stat label="Time Left" value={(devSimEnd ? 'Ended' : (timeLeft > 0 ? `${Math.floor(timeLeft/3600)}h ${Math.floor((timeLeft%3600)/60)}m` : "Ended"))} />
+                <Stat label="Round Status" value={`${(demoMode ? demoRoundState : roundState) === 0 ? (((demoMode ? demoTimeLeft : timeLeft) <= 0) ? 'Ended' : 'Open') : ((demoMode ? demoRoundState : roundState) === 1 ? 'Closed' : 'Finalized')}`} />
+                <Stat label="Prize Pool" value={`${formatToken(demoMode ? demoPrizePool : prizePool, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(demoMode ? demoPrizePool : prizePool, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
+                <Stat label="Your Deposit" value={`${formatToken(demoMode ? demoUserDeposit : userDeposit, decimals, 4)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(demoMode ? demoUserDeposit : userDeposit, decimals, 4)) * usdPrice).toFixed(2)})`:''}`} />
+                {!!incentiveBps && <Stat label="Caller Reward" value={`${incentiveBps/100}% of prize/yield`} />}
+                <Stat label="Total Tickets" value={String(demoMode ? demoTotalTickets : totalTickets)} />
+                <Stat label="Your Tickets" value={String(demoMode ? demoUserTickets : userTickets)} />
+                <Stat label="Your Odds" value={demoMode ? `${(Number(demoUserTickets) / Math.max(1, Number(demoTotalTickets)) * 100).toFixed(2)}%` : currentOdds} />
+                <Stat label="Time Left" value={((demoMode ? demoTimeLeft : timeLeft) > 0 ? `${Math.floor((demoMode ? demoTimeLeft : timeLeft)/3600)}h ${Math.floor(((demoMode ? demoTimeLeft : timeLeft)%3600)/60)}m` : 'Ended')} />
+                {lastWinner && (
+                  <>
+                    <Stat label="Last Winner" value={`${lastWinner.slice(0,6)}...${lastWinner.slice(-4)} (round ${String(lastFinalizedRound)})`} />
+                    <Stat label="Last Prize" value={`${formatToken(lastPrize, decimals)} ${symbol}${usdPrice!==null?` ($${(Number(formatToken(lastPrize, decimals)) * usdPrice).toFixed(2)})`:''}`} />
+                  </>
+                )}
               </div>
-              {(roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound) || (roundState === 1) ? (
+              {(!demoMode && ((roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound) || (roundState === 1))) || (demoMode && (demoRoundState !== 2)) ? (
                 <div className="mt-4 rounded-lg border border-border bg-background/60 p-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="text-sm text-muted-foreground">
-                      {roundState === 0 ? 'Round has ended. You can close the round to schedule the draw.' : (canFinalizeRound ? 'Draw block reached. You can finalize to select a winner.' : `Waiting for draw block #${drawBlock.toString()} to be reachable...`)}
+                      {demoMode ? (
+                        demoRoundState === 0 ? 'Demo: End the round to schedule draw.' : (demoRoundState === 1 ? 'Demo: Ready to draw.' : 'Demo: Finalized')
+                      ) : (
+                        roundState === 0 ? 'Round has ended. You can close the round to schedule the draw.' : (canFinalizeRound ? 'Draw block reached. You can finalize to select a winner.' : `Waiting for draw block #${drawBlock.toString()} to be reachable...`)
+                      )}
                     </div>
                     <div className="flex gap-2">
-                      {roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound && (
-                        <button onClick={onCloseRound} disabled={actionBusy==='close'} className="px-3 py-2 rounded-md bg-amber-600/80 text-white cursor-pointer disabled:opacity-60">
-                          {actionBusy==='close' ? 'Closing…' : 'Close Round'}
-                        </button>
+                      {!demoMode && (
+                        <>
+                          <button onClick={onHarvestYield} disabled={actionBusy!==null} className="px-3 py-2 rounded-md border border-border hover:bg-secondary cursor-pointer disabled:opacity-60">
+                            Harvest Yield{incentiveBps ? ` (+${incentiveBps/100}% reward)` : ''}
+                          </button>
+                          {roundState === 0 && (devSimEnd || timeLeft <= 0) && canCloseRound && (
+                            <button onClick={onCloseRound} disabled={actionBusy==='close'} className="px-3 py-2 rounded-md bg-amber-600/80 text-white cursor-pointer disabled:opacity-60">
+                              {actionBusy==='close' ? 'Closing…' : 'Close Round'}
+                            </button>
+                          )}
+                          {roundState === 1 && (
+                            <button onClick={onFinalizeRound} disabled={!canFinalizeRound || actionBusy==='finalize'} className="px-3 py-2 rounded-md bg-primary text-primary-foreground cursor-pointer disabled:opacity-60">
+                              {actionBusy==='finalize' ? 'Finalizing…' : `Draw / Check Result${incentiveBps ? ` (+${incentiveBps/100}% reward)` : ''}`}
+                            </button>
+                          )}
+                        </>
                       )}
-                      {roundState === 1 && (
-                        <button onClick={onFinalizeRound} disabled={!canFinalizeRound || actionBusy==='finalize'} className="px-3 py-2 rounded-md bg-primary text-primary-foreground cursor-pointer disabled:opacity-60">
-                          {actionBusy==='finalize' ? 'Finalizing…' : 'Finalize Round'}
-                        </button>
+                      {demoMode && (
+                        <>
+                          <button onClick={() => setDemoPrizePool((v)=>v + BigInt(10_000_000_000_000_000))} className="px-3 py-2 rounded-md border border-border hover:bg-secondary cursor-pointer">Demo: +0.01 {symbol} prize</button>
+                          {demoRoundState === 0 && (
+                            <button onClick={() => { setDemoRoundState(1); setDemoCanClose(false); setDemoCanFinalize(true); setDemoTimeLeft(0); }} className="px-3 py-2 rounded-md bg-amber-600/80 text-white cursor-pointer">Demo: Close Round</button>
+                          )}
+                          {demoRoundState === 1 && (
+                            <button onClick={() => { setDrawWinner(address as string); setDrawPrize(demoPrizePool || BigInt(100000000000000000)); setDrawOpen(true); setDemoRoundState(2); setLastWinner(address as string); setLastPrize(demoPrizePool); setLastFinalizedRound(demoCurrentRound); setDemoCurrentRound((r)=>r+BigInt(1)); setDemoPrizePool(BigInt(0)); setDemoTotalTickets(BigInt(0)); setDemoUserTickets(BigInt(0)); setDemoParticipants([]); }} className="px-3 py-2 rounded-md bg-primary text-primary-foreground cursor-pointer">Demo: Draw / Check Result</button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
                   {txError && <div className="mt-2 text-xs text-red-400">{txError}</div>}
                 </div>
               ) : null}
+              {lastWinner && address && lastWinner.toLowerCase() === address.toLowerCase() && !acknowledgedWin && (
+                <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 flex items-center justify-between">
+                  <div className="text-sm">🎉 You won round {String(lastFinalizedRound)}! Prize: {formatToken(lastPrize, decimals)} {symbol}</div>
+                  <button onClick={() => setAcknowledgedWin(true)} className="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm">Claim Prize</button>
+                </div>
+              )}
             </div>
             <div className="border p-5 bg-card rounded-xl">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-medium">Live Participants</h3>
                 <Tooltip text="Live participants and odds."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
               </div>
-              <CurrentParticipantsLive totalTickets={totalTickets} symbol={symbol} />
+              {demoMode ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-muted-foreground">
+                      <tr>
+                        <th className="text-left font-normal py-2">Address</th>
+                        <th className="text-left font-normal py-2">Tickets</th>
+                        <th className="text-left font-normal py-2">Odds</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {demoParticipants.length === 0 ? (
+                        <tr><td className="py-3 text-muted-foreground" colSpan={3}>No participants yet.</td></tr>
+                      ) : (
+                        demoParticipants.map((p) => {
+                          const pct = demoTotalTickets === BigInt(0) ? 0 : (Number(p.tickets) / Number(demoTotalTickets)) * 100;
+                          return (
+                            <tr key={p.addr} className="border-t border-border/60">
+                              <td className="py-2">{p.addr.slice(0,6)}...{p.addr.slice(-4)}</td>
+                              <td className="py-2">{String(p.tickets)}</td>
+                              <td className="py-2">{pct.toFixed(2)}%</td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <CurrentParticipantsLive totalTickets={totalTickets} symbol={symbol} />
+              )}
             </div>
             <div className="border p-5 bg-card rounded-xl">
               <div className="flex items-center gap-2">
@@ -687,6 +990,36 @@ export default function AppPage() {
               </div>
             </div>
           </div>
+
+          <div className="md:col-span-3">
+            <div className="border p-5 bg-card rounded-xl">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between text-left"
+                onClick={async () => { const next = !debugOpen; setDebugOpen(next); if (next) await loadDebug(); }}
+                aria-expanded={debugOpen}
+              >
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-medium">Debug State</h3>
+                  <Tooltip text="Shows full contract state and computed values."><span className="text-xs text-muted-foreground border border-border rounded px-1.5 py-0.5">?</span></Tooltip>
+                </div>
+                <ChevronDown size={16} className={cn("transition-transform", debugOpen ? "rotate-180" : "rotate-0")} />
+              </button>
+              {debugOpen && (
+                <div className="mt-3">
+                  {debugLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading…</div>
+                  ) : (
+                    <pre className="text-xs whitespace-pre-wrap break-all bg-background/60 border border-border rounded p-3 overflow-auto max-h-96">{debugJson}</pre>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={loadDebug} className="px-3 py-1.5 rounded-md border border-border hover:bg-secondary text-sm">Refresh</button>
+                    <button onClick={() => { navigator.clipboard.writeText(debugJson || ''); }} className="px-3 py-1.5 rounded-md border border-border hover:bg-secondary text-sm">Copy</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
       {drawOpen && (
@@ -695,11 +1028,12 @@ export default function AppPage() {
           onClaim={async () => { setClaiming(true); await new Promise(r=>setTimeout(r,1200)); setClaiming(false); setClaimed(true); }}
           claiming={claiming}
           claimed={claimed}
-          prize={prizePool > BigInt(0) ? prizePool : BigInt(100000000000000000)}
+          prize={drawPrize && drawPrize > BigInt(0) ? drawPrize : (prizePool > BigInt(0) ? prizePool : BigInt(100000000000000000))}
           symbol={symbol}
           decimals={decimals}
           usdPrice={usdPrice}
           yourAddress={address as string}
+          winnerAddress={drawWinner}
         />
       )}
       {infoOpen && (
@@ -766,8 +1100,8 @@ function InfoModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DrawModal({ onClose, onClaim, claiming, claimed, prize, symbol, decimals, usdPrice, yourAddress }:
-  { onClose: () => void; onClaim: () => void | Promise<void>; claiming: boolean; claimed: boolean; prize: bigint; symbol: string; decimals: number; usdPrice: number | null; yourAddress: string }) {
+function DrawModal({ onClose, onClaim, claiming, claimed, prize, symbol, decimals, usdPrice, yourAddress, winnerAddress }:
+  { onClose: () => void; onClaim: () => void | Promise<void>; claiming: boolean; claimed: boolean; prize: bigint; symbol: string; decimals: number; usdPrice: number | null; yourAddress: string; winnerAddress?: string | null }) {
   const [phase, setPhase] = useState<'spinning' | 'reveal' | 'won'>("spinning");
   const [displayAddr, setDisplayAddr] = useState<string>("0x????????????????????????????????????????");
   useEffect(() => {
