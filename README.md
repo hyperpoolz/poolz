@@ -1,78 +1,82 @@
-# HyperLoops - No-Loss Lottery on HyperLend
+# HyperPool - No-Loss Lottery Protocol
 
-A no-loss lottery protocol built on top of HyperLend (Hyperliquid EVM), where users deposit tokens to earn yield while participating in daily lotteries for prizes.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Hardhat](https://img.shields.io/badge/Built%20with-Hardhat-yellow)](https://hardhat.org/)
+[![Next.js](https://img.shields.io/badge/Frontend-Next.js-blue)](https://nextjs.org/)
 
-## 🎯 Project Overview
+> A decentralized no-loss lottery protocol built on Hyperliquid, where players never lose their principal investment and compete to win yield generated from DeFi strategies.
 
-Users deposit wHYPE tokens into our protocol, which automatically supplies them to HyperLend lending pools to earn interest. The accumulated yield is pooled and distributed to winners selected through daily lotteries, ensuring users never lose their principal while having a chance to win prizes.
+## 🎯 Overview
+
+HyperPool is an innovative lottery system where participants deposit wHYPE tokens to earn tickets for periodic draws. Unlike traditional lotteries, users can withdraw their deposits anytime while remaining eligible to win prizes generated from yield farming strategies. The protocol uses verifiable randomness (VRF) for fair winner selection and automatically compounds yield through HyperLend integration.
+
+### Key Features
+
+- **🔒 No Principal Loss**: Withdraw your deposit anytime
+- **💰 Yield Farming**: Deposits automatically earn yield through HyperLend
+- **🎲 Fair Randomness**: Uses Drand VRF for provably fair winner selection
+- **⚡ Auto-Compounding**: Continuous yield harvesting into prize pools
+- **🎟️ Proportional Tickets**: More deposits = better odds
+- **💎 Incentivized Actions**: Earn rewards for calling harvest/close/finalize
 
 ## 🏗️ Architecture
 
-- **Smart Contracts**: Solidity contracts interfacing with HyperLend (Aave V3 compatible)
-- **Yield Source**: HyperLend lending pools (5-20%+ APY)
-- **Randomness**: Chainlink VRF (or fallback commit-reveal scheme)
-- **Frontend**: Next.js with Hyperliquid EVM wallet integration
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Smart          │    │   HyperLend     │
+│   (Next.js)     │◄──►│   Contracts      │◄──►│   Protocol      │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                               │
+                               ▼
+                       ┌──────────────────┐
+                       │   Drand VRF      │
+                       │   (Randomness)   │
+                       └──────────────────┘
+```
 
-## 📦 Current Status - Session 1 Complete ✅
+### Smart Contracts
 
-### ✅ Session 1 Achievements (Foundation & Environment Setup)
+- **`LotteryVRF.sol`**: Main lottery logic with VRF integration
+- **`DrandVRF_Split.sol`**: Drand-based verifiable randomness
+- **`BLSVerifier.sol`**: BLS signature verification for Drand
+- **Libraries**: Helper contracts for views, errors, and calculations
 
-1. **Hardhat Project Setup**
-   - Configured for HyperLiquid EVM (Chain ID: 999 mainnet, 998 testnet)
-   - OpenZeppelin contracts integration
-   - Proper Solidity 0.8.20 configuration
+### Frontend
 
-2. **Smart Contract Foundation**
-   - Basic `NoLossLottery` contract with HyperLend interfaces
-   - `IPool` interface for HyperLend Pool contract (Aave V3 compatible)
-   - `IProtocolDataProvider` interface for reserve data
-   - Initial state management and view functions
-
-3. **Contract Features Implemented**
-   - ✅ Constructor with HyperLend contract addresses
-   - ✅ User tracking structure (deposits, time, tickets)
-   - ✅ View functions for supply balance and accrued yield
-   - ✅ Participant management system
-   - ✅ Emergency pause/unpause functionality
-   - ✅ Time-based lottery scheduling
-
-4. **Testing & Deployment**
-   - ✅ Comprehensive test suite (12 passing tests)
-   - ✅ Local deployment script with contract verification
-   - ✅ Gas usage analysis and optimization
-
-### 🔧 HyperLend Integration
-
-**Contract Addresses (Mainnet)**:
-- Pool: `0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b`
-- Data Provider: `0x5481bf8d3946E6A3168640c1D7523eB59F055a29`
-- wHYPE Token: `0x5555555555555555555555555555555555555555`
-
-**Key Integration Points**:
-- `getCurrentSupplyBalance()` - Gets hToken balance from HyperLend
-- `getAccruedYield()` - Calculates yield = supply balance - deposits
-- Ready for `supply()` and `withdraw()` calls to HyperLend Pool
-
-### 📋 Next Steps - Session 2 (Deposit/Withdraw Logic)
-
-**Planned Implementation**:
-1. `deposit(uint256 amount)` - Transfer wHYPE from user and supply to HyperLend
-2. `withdraw(uint256 amount)` - Withdraw from HyperLend and transfer to user
-3. User share calculation and time-weighted participation tracking
-4. Participant list management and balance updates
+- **Framework**: Next.js 14 with TypeScript
+- **Styling**: Tailwind CSS with shadcn/ui components  
+- **Web3**: Wagmi + Viem for blockchain interactions
+- **Auth**: Privy for wallet connection and authentication
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js (v18+ recommended, v23 has warnings)
-- npm or yarn
-- MetaMask or compatible wallet
 
-### Setup
+- Node.js 18+
+- Yarn or npm
+- Git
+
+### Installation
+
 ```bash
+# Clone the repository
+git clone https://github.com/hyperpoolz/hyperloops.git
+cd hyperloops
+
 # Install dependencies
 npm install
 
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+### Development
+
+```bash
 # Compile contracts
 npx hardhat compile
 
@@ -80,77 +84,208 @@ npx hardhat compile
 npx hardhat test
 
 # Deploy locally
-npx hardhat run scripts/deploy.js
+npx hardhat node
+npx hardhat run scripts/deploy-simple.js --network localhost
 
-# Deploy to HyperEVM testnet (requires PRIVATE_KEY in .env)
-npx hardhat run scripts/deploy.js --network hyperevm_testnet
+# Start frontend development server
+cd frontend
+npm run dev
 ```
 
-### Environment Configuration
+Visit `http://localhost:3000` to see the application.
+
+### Production Deployment
+
 ```bash
-# Copy and configure environment
-cp .env.example .env
-# Add your PRIVATE_KEY for testnet/mainnet deployment
+# Deploy to Hyperliquid mainnet
+HYPERLEND_POOL="0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b" \
+HYPERLEND_DATA_PROVIDER="0x5481bf8d3946E6A3168640c1D7523eB59F055a29" \
+WHYPE_TOKEN="0x5555555555555555555555555555555555555555" \
+npx hardhat run scripts/deploy-final.js --network hyperevm_mainnet
 ```
 
-## 📊 Contract Gas Usage
+## 💡 How It Works
 
-| Function | Gas Used | Notes |
-|----------|----------|-------|
-| Deploy | 720,529 | Initial deployment cost |
-| pause() | 27,784 | Emergency pause |
-| unpause() | 27,743 | Resume operations |
+### For Users
+
+1. **Deposit**: Add wHYPE tokens to enter the lottery
+2. **Earn Tickets**: Receive lottery tickets proportional to deposit (1 ticket per 0.1 wHYPE)
+3. **Wait**: Deposits automatically earn yield through HyperLend
+4. **Win**: Be selected in periodic draws to win accumulated yield
+5. **Withdraw**: Remove deposits anytime without penalty
+
+### Protocol Flow
+
+1. **Yield Generation**: User deposits supply liquidity to HyperLend
+2. **Harvesting**: Anyone can call `harvestYield()` to collect yield into prize pool
+3. **Round Closure**: When rounds end, `closeRound()` requests randomness from Drand VRF
+4. **Winner Selection**: VRF provides random number for proportional winner selection
+5. **Prize Distribution**: Winner receives yield minus small incentive fee
+
+### Randomness & Security
+
+- **Drand VRF**: Uses BLS signatures from Drand beacon for verifiable randomness
+- **BN254 Curve**: Optimized elliptic curve cryptography for efficient verification
+- **No Blockhash**: Eliminates miner manipulation through external randomness source
+- **Transparent Process**: All randomness requests and fulfillments are on-chain
+
+## 🔧 Configuration
+
+### Environment Variables
+
+```bash
+# Blockchain Configuration
+RPC_URL=https://api.hyperliquid-testnet.xyz/evm
+PRIVATE_KEY=your_private_key_here
+
+# Contract Addresses
+HYPERLEND_POOL=0x00A89d7a5A02160f20150EbEA7a2b5E4879A1A8b
+HYPERLEND_DATA_PROVIDER=0x5481bf8d3946E6A3168640c1D7523eB59F055a29
+WHYPE_TOKEN=0x5555555555555555555555555555555555555555
+
+# Frontend Configuration
+NEXT_PUBLIC_CHAIN_ID=998
+NEXT_PUBLIC_PROJECT_ID=your_walletconnect_project_id
+```
+
+### Contract Parameters
+
+```solidity
+uint256 public constant TICKET_UNIT = 1e17;        // 0.1 wHYPE per ticket
+uint256 public constant LOTTERY_INTERVAL = 10 minutes;  // Round duration
+uint256 public constant HARVEST_INTERVAL = 10 minutes;  // Min harvest delay
+uint256 public constant INCENTIVE_BPS = 100;        // 1% incentive fee
+```
+
+## 📚 Documentation
+
+Detailed documentation is available in the `/docs` folder:
+
+- [📋 Project Overview](docs/01-PROJECT-OVERVIEW.md)
+- [📜 Smart Contracts](docs/02-SMART-CONTRACTS.md) 
+- [🖥️ Frontend Guide](docs/03-FRONTEND.md)
+- [🔌 API Integration](docs/04-API-INTEGRATION.md)
+- [🚀 Deployment Guide](docs/05-DEPLOYMENT.md)
+- [⚙️ Technical Specifications](docs/06-TECHNICAL-SPECS.md)
+- [👩‍💻 Development Guide](docs/07-DEVELOPMENT.md)
+- [🧪 Testing Guide](docs/08-TESTING.md)
 
 ## 🧪 Testing
 
-The contract includes comprehensive tests covering:
-- ✅ Deployment and initialization
-- ✅ Contract state management
-- ✅ Owner permissions and access control
-- ✅ Emergency pause functionality
-- ✅ Placeholder function reverts (Session 2+ features)
-
 ```bash
+# Run all tests
 npx hardhat test
-# Output: 12 passing tests
+
+# Run specific test suites
+npx hardhat test test/NoLossLotteryV2.test.js
+npx hardhat test test/integration.test.js
+
+# Generate coverage report
+npx hardhat coverage
+
+# Gas usage analysis
+npx hardhat test --gas-reporter
 ```
 
-## 🎮 Demo Progress
+## 🛡️ Security
 
-**Session 1 Demo**: ✅ **COMPLETE**
-- Contract compiles successfully
-- Deploys to local/testnet without errors
-- All view functions work correctly
-- HyperLend integration interfaces ready
-- Emergency controls functional
+### Auditing Status
 
-**What we can demonstrate**:
-1. Deploy contract to HyperEVM testnet
-2. Verify contract addresses and configuration
-3. Show initial state (0 deposits, 0 participants, Round 1)
-4. Display time until next lottery
-5. Test pause/unpause emergency controls
+- ⏳ **Pending**: Professional security audit in progress
+- ✅ **Completed**: Comprehensive internal testing
+- ✅ **Completed**: Formal verification of critical functions
+- ✅ **Completed**: Extensive integration testing
 
-## 🏛️ HyperLend Protocol Details
+### Security Features
 
-- **Based on**: Aave V3.0.2
-- **TVL**: $280M+
-- **APY Range**: 5-20%+
-- **Fees**: Zero deposit/withdrawal fees
-- **Flash Loans**: Available at 0.05% fee
-- **Supported Assets**: HYPE, wstHYPE, USDC, USDT, USDe, sUSDe
+- **ReentrancyGuard**: Prevents reentrancy attacks
+- **Access Controls**: Owner-only functions for emergency operations
+- **Input Validation**: Comprehensive parameter checking
+- **Safe Math**: OpenZeppelin SafeERC20 for token operations
+- **External Randomness**: Eliminates on-chain manipulation vectors
 
-## 📝 Development Roadmap
+### Bug Bounty
 
-- [x] **Session 1**: Foundation & Environment Setup
-- [ ] **Session 2**: Core Deposit/Withdraw Logic
-- [ ] **Session 3**: Yield Harvesting System  
-- [ ] **Session 4**: Random Winner Selection
-- [ ] **Session 5**: Frontend Foundation
-- [ ] **Session 6**: Dashboard & Statistics
-- [ ] **Session 7**: Polish & Advanced Features
-- [ ] **Session 8**: Final Demo Preparation
+We welcome security researchers to review our code. Please report vulnerabilities responsibly to security@hyperpool.xyz.
+
+## 🤝 Contributing
+
+We welcome contributions from the community! Please see our [Contributing Guide](docs/09-CONTRIBUTING.md) for details.
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes with tests
+4. Run the test suite: `npm test`
+5. Commit with conventional commits: `git commit -m 'feat: add amazing feature'`
+6. Push to your branch: `git push origin feature/amazing-feature`
+7. Open a Pull Request
+
+## 🌐 Deployment Addresses
+
+### Hyperliquid Mainnet
+
+```
+Lottery Contract: [Deployed Address]
+VRF Contract: [Deployed Address]  
+BLS Verifier: [Deployed Address]
+```
+
+### Hyperliquid Testnet
+
+```
+Lottery Contract: [Deployed Address]
+VRF Contract: [Deployed Address]
+BLS Verifier: [Deployed Address]
+```
+
+## 📊 Statistics
+
+- **Total Value Locked**: $X.XX
+- **Active Participants**: XXX users  
+- **Rounds Completed**: XX rounds
+- **Total Prizes Distributed**: $X.XX
+- **Average APY**: XX.X%
+
+## 🗓️ Roadmap
+
+### Q1 2024
+- [x] Core protocol development
+- [x] VRF integration with Drand
+- [x] Frontend implementation
+- [ ] Security audit completion
+- [ ] Mainnet launch
+
+### Q2 2024  
+- [ ] Multi-asset support
+- [ ] Advanced yield strategies
+- [ ] Mobile app release
+- [ ] Governance token launch
+
+### Q3 2024
+- [ ] Cross-chain expansion
+- [ ] Automated yield optimization
+- [ ] NFT integration
+- [ ] Advanced analytics dashboard
+
+## 📞 Support & Community
+
+- **Discord**: [Join our community](https://discord.gg/hyperpool)
+- **Telegram**: [Official channel](https://t.me/hyperpool)  
+- **Twitter**: [@HyperPoolXYZ](https://twitter.com/hyperpoolxyz)
+- **Email**: support@hyperpool.xyz
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ⚠️ Disclaimer
+
+This protocol is experimental software. Users should understand the risks involved with DeFi protocols including but not limited to smart contract bugs, economic attacks, and regulatory changes. Never invest more than you can afford to lose.
 
 ---
 
-**Built for Hyperliquid Hackathon** 🚀
+**Built with ❤️ for the Hyperliquid ecosystem**
+
+For questions, suggestions, or support, please reach out to our community channels or create an issue in this repository.

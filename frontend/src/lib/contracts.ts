@@ -3,6 +3,7 @@ export const contractAddresses = {
   hyperLendPool: process.env.NEXT_PUBLIC_HYPERLEND_POOL as string,
   dataProvider: process.env.NEXT_PUBLIC_HYPERLEND_DATA_PROVIDER as string,
   depositToken: process.env.NEXT_PUBLIC_WHYPE_TOKEN as string,
+  vrfContract: process.env.NEXT_PUBLIC_VRF_CONTRACT as string,
 };
 
 export const ERC20_ABI = [
@@ -49,7 +50,7 @@ export const ERC20_ABI = [
   },
 ] as const;
 
-// NoLossLotteryV2Micro ABI - aligned with contracts/NoLossLotteryV2Micro.sol
+// NoLossLotteryV2Optimized ABI - aligned with contracts/LotteryVRF.sol
 export const V2_LOTTERY_ABI = [
   // Custom errors (for better revert decoding)
   { type: "error", name: "InvalidAddress", inputs: [] },
@@ -68,6 +69,9 @@ export const V2_LOTTERY_ABI = [
   { type: "error", name: "BlockhashNotAvailable", inputs: [] },
   { type: "error", name: "NoWinnerSelected", inputs: [] },
   { type: "error", name: "InsufficientWithdrawal", inputs: [] },
+  // VRF-specific errors
+  { type: "error", name: "InvalidVRFCaller", inputs: [] },
+  { type: "error", name: "RandomnessNotReady", inputs: [] },
   // Constants
   {
     name: "TICKET_UNIT",
@@ -201,12 +205,14 @@ export const V2_LOTTERY_ABI = [
     stateMutability: "view",
     inputs: [{ name: "roundId", type: "uint256" }],
     outputs: [
+      { name: "startTime", type: "uint256" },
       { name: "endTime", type: "uint256" },
-      { name: "drawBlock", type: "uint256" },
-      { name: "roundTotalTickets", type: "uint256" },
-      { name: "prize", type: "uint256" },
+      { name: "requestId", type: "uint256" },
+      { name: "totalTickets", type: "uint256" },
+      { name: "prizeAmount", type: "uint256" },
       { name: "winner", type: "address" },
       { name: "state", type: "uint8" },
+      { name: "participantCount", type: "uint256" },
     ],
   },
   {
@@ -350,5 +356,48 @@ export const WETH_LIKE_ABI = [
     stateMutability: "nonpayable",
     inputs: [{ name: "wad", type: "uint256" }],
     outputs: [],
+  },
+] as const;
+
+// VRF contract ABI
+export const VRF_ABI = [
+  {
+    name: "fulfillRandomness",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "id", type: "uint256" },
+      { name: "round", type: "uint64" },
+      { name: "signature", type: "uint256[2]" }
+    ],
+    outputs: [],
+  },
+  {
+    name: "getRequest",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "deadline", type: "uint64" },
+          { name: "minRound", type: "uint64" },
+          { name: "fulfilled", type: "bool" },
+          { name: "requester", type: "address" },
+          { name: "callback", type: "address" },
+          { name: "salt", type: "bytes32" },
+          { name: "randomness", type: "bytes32" }
+        ]
+      }
+    ],
+  },
+  {
+    name: "minRoundFromDeadline",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "deadline", type: "uint256" }],
+    outputs: [{ name: "", type: "uint64" }],
   },
 ] as const;
