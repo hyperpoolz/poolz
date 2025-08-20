@@ -23,6 +23,8 @@ import { useContractData } from "./hooks/useContractData";
 import { useUserData } from "./hooks/useUserData";
 import { useWallet } from "./hooks/useWallet";
 import { useLotteryActions } from "./hooks/useLotteryActions";
+import { useHarvestSequence } from "./hooks/useHarvestSequence";
+import { HarvestLockedPopup } from "./components/HarvestLockedPopup";
 
 // Types for cleaner code organization
 interface RoundInfo {
@@ -52,11 +54,23 @@ export default function V2Page() {
   const { data: userData } = useUserData(address);
   const { loading: actionLoading, error: actionError, clearError, actions } = useLotteryActions();
   
-  // Extract contract data with proper defaults
+  // Extract contract data first for harvest sequence hook
   const {
     decimals, symbol, ticketUnit, totalTickets, prizePool, currentRound, 
     timeLeft, roundState, lastWinner, lastPrize
   } = contractData;
+  
+  const {
+    canHarvest,
+    canClose,
+    canFinalize,
+    showHarvestLockedPopup,
+    markHarvestCompleted,
+    markCloseCompleted,
+    markFinalizeCompleted,
+    handleHarvestClick,
+    closeHarvestPopup,
+  } = useHarvestSequence(currentRound, roundState, timeLeft);
   
   // Extract user data
   const { userDeposit, userTickets } = userData;
@@ -159,6 +173,40 @@ export default function V2Page() {
       // Error handled by useLotteryActions hook
     }
   }, [address, parsedWithdrawAmount, ticketUnit, actions]);
+
+  // Enhanced action handlers with state tracking
+  const handleHarvest = useCallback(async () => {
+    if (!handleHarvestClick()) return;
+    
+    try {
+      await actions.harvestYield();
+      markHarvestCompleted();
+    } catch {
+      // Error handled by useLotteryActions hook
+    }
+  }, [handleHarvestClick, actions, markHarvestCompleted]);
+
+  const handleClose = useCallback(async () => {
+    if (!canClose) return;
+    
+    try {
+      await actions.closeRound();
+      markCloseCompleted();
+    } catch {
+      // Error handled by useLotteryActions hook
+    }
+  }, [canClose, actions, markCloseCompleted]);
+
+  const handleFinalize = useCallback(async () => {
+    if (!canFinalize) return;
+    
+    try {
+      await actions.finalizeRound(currentRound);
+      markFinalizeCompleted();
+    } catch {
+      // Error handled by useLotteryActions hook
+    }
+  }, [canFinalize, actions, currentRound, markFinalizeCompleted]);
 
   // Switch/Add HyperEVM convenience
   const ensureHyperEvm = useCallback(async () => {
@@ -498,27 +546,37 @@ export default function V2Page() {
 
             {/* Management Actions */}
             <div className="rounded-2xl border border-border bg-card p-6">
-              <h3 className="text-xl font-bold mb-4">Round Management</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold">Round Management</h3>
+                <div className="text-sm bg-primary/10 text-primary px-3 py-1 rounded-full">
+                  💰 Earn 1% per action
+                </div>
+              </div>
+              <div className="mb-4 p-3 rounded-lg bg-secondary/20 border border-border">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Incentivized Actions:</strong> Anyone can call these management functions and earn 1% of the action's value as a reward for helping maintain the lottery system.
+                </p>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <ManagementButton 
-                  onClick={actions.harvestYield}
-                  disabled={actionLoading === 'harvest'}
+                  onClick={handleHarvest}
+                  disabled={actionLoading === 'harvest' || !canHarvest}
                   icon={<Coins className="w-4 h-4" />}
-                  label={actionLoading === 'harvest' ? 'Harvesting...' : 'Harvest Yield'}
+                  label={actionLoading === 'harvest' ? 'Harvesting...' : 'Harvest Yield (+1%)'}
                   variant="secondary"
                 />
                 <ManagementButton 
-                  onClick={actions.closeRound}
-                  disabled={actionLoading === 'close' || !(roundState === 0 && timeLeft <= 0)}
+                  onClick={handleClose}
+                  disabled={actionLoading === 'close' || !canClose}
                   icon={<Clock className="w-4 h-4" />}
-                  label={actionLoading === 'close' ? 'Closing...' : 'Close Round'}
+                  label={actionLoading === 'close' ? 'Closing...' : canClose ? 'Close Round (+1%)' : 'Harvest Required'}
                   variant="warning"
                 />
                 <ManagementButton 
-                  onClick={() => actions.finalizeRound(currentRound)}
-                  disabled={actionLoading === 'finalize'}
+                  onClick={handleFinalize}
+                  disabled={actionLoading === 'finalize' || !canFinalize}
                   icon={<Zap className="w-4 h-4" />}
-                  label={actionLoading === 'finalize' ? 'Drawing...' : 'Draw Winner'}
+                  label={actionLoading === 'finalize' ? 'Drawing...' : canFinalize ? 'Draw Winner (+1%)' : 'Harvest Required'}
                   variant="primary"
                 />
               </div>
@@ -546,9 +604,10 @@ export default function V2Page() {
                 <HowItWorksStep number={1} text="Deposit wHYPE tokens to enter the lottery. We auto-wrap HYPE if needed." />
                 <HowItWorksStep number={2} text="Your deposit is safely stored and earns yield continuously from DeFi protocols." />
                 <HowItWorksStep number={3} text="Yield is periodically harvested and accumulated into the prize pool for winners." />
-                <HowItWorksStep number={4} text="When rounds end, winners are selected proportionally using verifiable randomness." />
-                <HowItWorksStep number={5} text="Withdraw your original deposit anytime - you never lose your principal." />
-                <HowItWorksStep number={6} text="The more you deposit, the higher your odds of winning the accumulated yield." />
+                <HowItWorksStep number={4} text="Anyone can call management functions (Harvest, Close, Draw) and earn 1% rewards." />
+                <HowItWorksStep number={5} text="When rounds end, winners are selected proportionally using verifiable randomness." />
+                <HowItWorksStep number={6} text="Withdraw your original deposit anytime - you never lose your principal." />
+                <HowItWorksStep number={7} text="The more you deposit, the higher your odds of winning the accumulated yield." />
               </div>
             </div>
           </div>
@@ -563,6 +622,13 @@ export default function V2Page() {
             </div>
           </div>
         )}
+
+        {/* Harvest Locked Popup */}
+        <HarvestLockedPopup 
+          isOpen={showHarvestLockedPopup}
+          onClose={closeHarvestPopup}
+          timeLeft={timeLeft}
+        />
       </main>
     </div>
   );
