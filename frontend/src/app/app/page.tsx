@@ -516,7 +516,7 @@ export default function V2Page() {
                 />
                 <ManagementButton 
                   onClick={() => actions.finalizeRound(currentRound)}
-                  disabled={actionLoading === 'finalize' || roundState !== 1}
+                  disabled={actionLoading === 'finalize'}
                   icon={<Zap className="w-4 h-4" />}
                   label={actionLoading === 'finalize' ? 'Drawing...' : 'Draw Winner'}
                   variant="primary"
