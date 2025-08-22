@@ -58,13 +58,12 @@ export default function V2Page() {
   // Extract contract data first for harvest sequence hook
   const {
     decimals, symbol, ticketUnit, totalTickets, prizePool, currentRound, 
-    timeLeft, roundState, lastWinner, lastPrize
+    timeLeft, roundState, lastWinner, lastPrize, canFinalizeRound
   } = contractData;
   
   const {
     canHarvest,
     canClose,
-    canFinalize,
     showHarvestLockedPopup,
     markHarvestCompleted,
     markCloseCompleted,
@@ -199,15 +198,13 @@ export default function V2Page() {
   }, [canClose, actions, markCloseCompleted]);
 
   const handleFinalize = useCallback(async () => {
-    if (!canFinalize) return;
-    
     try {
       await actions.finalizeRound(currentRound);
       markFinalizeCompleted();
     } catch {
       // Error handled by useLotteryActions hook
     }
-  }, [canFinalize, actions, currentRound, markFinalizeCompleted]);
+  }, [actions, currentRound, markFinalizeCompleted]);
 
   // Switch/Add HyperEVM convenience
   const ensureHyperEvm = useCallback(async () => {
@@ -573,9 +570,9 @@ export default function V2Page() {
                 />
                 <ManagementButton 
                   onClick={handleFinalize}
-                  disabled={actionLoading === 'finalize' || !canFinalize}
+                  disabled={actionLoading === 'finalize'}
                   icon={<Zap className="w-4 h-4" />}
-                  label={actionLoading === 'finalize' ? 'Drawing...' : canFinalize ? 'Draw Winner (+1%)' : 'Harvest Required'}
+                  label={actionLoading === 'finalize' ? 'Drawing...' : 'Draw Winner (+1%)'}
                   variant="primary"
                 />
               </div>

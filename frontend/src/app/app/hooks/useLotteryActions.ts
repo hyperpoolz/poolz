@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Address, parseUnits } from 'viem';
-import { contractAddresses, ERC20_ABI, V2_LOTTERY_ABI, WETH_LIKE_ABI, VRF_ABI } from '@/lib/contracts';
+import { Address } from 'viem';
+import { contractAddresses, ERC20_ABI, V2_LOTTERY_ABI, WETH_LIKE_ABI } from '@/lib/contracts';
 import { publicClient } from '@/lib/wallet';
 import { useWallet } from './useWallet';
 
@@ -162,61 +162,35 @@ export function useLotteryActions() {
       const walletClient = await getWalletClient();
       if (!walletClient) throw new Error("No wallet connected");
 
-      // Handle VRF if needed
-      const roundData = (await publicClient.readContract({
+      // Handle VRF if needed using server-side SDK
+      const roundInfo = (await publicClient.readContract({
         address: contractAddresses.lotteryContract as Address,
         abi: V2_LOTTERY_ABI,
-        functionName: "rounds",
+        functionName: "getRoundInfo",
         args: [currentRound],
-      })) as any;
+      })) as readonly [bigint, bigint, bigint, bigint, bigint, string, number, bigint];
 
-      const requestId = roundData?.[2];
+      const requestId = roundInfo?.[2] as bigint; // requestId per ABI
 
       if (requestId && requestId > BigInt(0)) {
-        const vrfRequest = (await publicClient.readContract({
-          address: contractAddresses.vrfContract as Address,
-          abi: VRF_ABI,
-          functionName: "getRequest",
-          args: [requestId],
-        })) as any;
-
-        if (!vrfRequest.fulfilled) {
-          // Fulfill VRF request
-          const info = await fetch('https://api.drand.sh/v2/beacons/evmnet/info').then(r => r.json());
-          
-          const roundFromDeadline = (genesis: number, period: number, deadline: number) => {
-            if (deadline <= genesis) return 1n;
-            const delta = BigInt(deadline - genesis);
-            const p = BigInt(period);
-            return delta % p === 0n ? (delta / p) : (delta / p + 1n);
-          };
-          
-          const genesis = Number(info.genesis_time);
-          const period = Number(info.period);
-          const deadline = Number(vrfRequest.deadline);
-          const minRound = BigInt(vrfRequest.minRound);
-          
-          const r = roundFromDeadline(genesis, period, deadline);
-          const targetRound = r < minRound ? minRound : r;
-          
-          const { signature } = await fetch(`https://api.drand.sh/v2/beacons/evmnet/rounds/${targetRound}`).then(r => r.json());
-          
-          const h = signature.startsWith('0x') ? signature.slice(2) : signature;
-          const realSignature: [bigint, bigint] = [
-            BigInt('0x' + h.slice(0, 64)),
-            BigInt('0x' + h.slice(64))
-          ];
-
-          const { request: vrfRequest_ } = await publicClient.simulateContract({
-            address: contractAddresses.vrfContract as Address,
-            abi: VRF_ABI,
-            functionName: "fulfillRandomness",
-            args: [requestId, targetRound, realSignature],
-            account: address,
+        try {
+          const res = await fetch('/api/vrf/fulfill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: requestId.toString(), wait: true }),
           });
-
-          const vrfHash = await walletClient.writeContract(vrfRequest_);
-          await publicClient.waitForTransactionReceipt({ hash: vrfHash });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err?.message || 'VRF fulfillment failed');
+          }
+          // If already fulfilled, continue
+          const data = await res.json().catch(() => null);
+          if (data?.alreadyFulfilled) {
+            // proceed to finalize
+          }
+        } catch (e) {
+          // Surface but do not swallow; finalize will likely revert if not ready
+          throw e;
         }
       }
 
