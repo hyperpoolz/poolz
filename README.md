@@ -24,7 +24,7 @@ HyperPool is an innovative lottery system where participants deposit wHYPE token
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Smart          │    │   HyperLend     │
-│   (Next.js)     │◄──►│   Contracts      │◄──►│   Protocol      │
+│   (Next.js + Privy)     │◄──►│   Contracts      │◄──►│   Protocol      │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                │
                                ▼
