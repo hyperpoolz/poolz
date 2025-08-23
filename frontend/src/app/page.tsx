@@ -11,7 +11,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <HyperPoolLogo size={28} />
-            <div className="text-xl font-semibold">HyperPool</div>
+            <div className="text-xl font-semibold">HyperPools</div>
           </div>
           <Link href="/app" className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:opacity-90 text-sm">
             Launch App

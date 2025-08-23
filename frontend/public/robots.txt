@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hyperpool.xyz/sitemap.xml
+Sitemap: https://hyperpools.xyz/sitemap.xml

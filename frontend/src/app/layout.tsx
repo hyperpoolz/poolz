@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HyperPool - No-Loss Lottery on Hyperliquid",
+  title: "HyperPools - No-Loss Lottery on Hyperliquid",
   description: "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid where you deposit wHYPE, earn yield, and get tickets for a chance to win the prize every round.",
   keywords: "hyperliquid, lottery, no-loss, defi, yield, wHYPE, blockchain, ethereum, hyperEVM",
-  authors: [{ name: "HyperPool Team" }],
-  creator: "HyperPool",
-  publisher: "HyperPool",
+  authors: [{ name: "HyperPools Team" }],
+  creator: "HyperPools",
+  publisher: "HyperPools",
   openGraph: {
-    title: "HyperPool - No-Loss Lottery on Hyperliquid",
+    title: "HyperPools - No-Loss Lottery on Hyperliquid",
     description: "Win with your yield, never lose your deposit. Deposit wHYPE and get tickets for a chance to win accumulated yield.",
-    url: "https://hyperpool.xyz",
-    siteName: "HyperPool",
+    url: "https://HyperPools.xyz",
+    siteName: "HyperPools",
     type: "website",
     locale: "en_US",
     images: [
@@ -32,15 +32,15 @@ export const metadata: Metadata = {
         url: "/og-image.svg",
         width: 1200,
         height: 630,
-        alt: "HyperPool - No-Loss Lottery on Hyperliquid",
+        alt: "HyperPools - No-Loss Lottery on Hyperliquid",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "HyperPool - No-Loss Lottery on Hyperliquid",
+    title: "HyperPools - No-Loss Lottery on Hyperliquid",
     description: "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid.",
-    creator: "@hyperpool",
+    creator: "@HyperPools",
     images: ["/og-image.svg"],
   },
   robots: {

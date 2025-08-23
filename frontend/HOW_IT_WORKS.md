@@ -1,10 +1,10 @@
-# 🎯 How HyperPool Works: The Fun Guide!
+# 🎯 How HyperPools Works: The Fun Guide!
 
-Welcome to HyperPool - where your money works harder than a coffee shop barista during finals week! ☕
+Welcome to HyperPools - where your money works harder than a coffee shop barista during finals week! ☕
 
-## 🚀 What Is HyperPool?
+## 🚀 What Is HyperPools?
 
-Think of HyperPool like a **magical piggy bank** that:
+Think of HyperPools like a **magical piggy bank** that:
 - ✅ Never loses your coins (your principal is always safe!)
 - 🎯 Uses your coins to earn yield in the background
 - 🎪 Turns that yield into exciting lottery prizes
@@ -152,7 +152,7 @@ Prize Pool ≈ 100 × 0.05 × (7/365) = ~0.096 wHYPE
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        HYPERPOOL CYCLE                          │
+│                        HyperPools CYCLE                          │
 │                                                                  │
 │  Players Deposit → Yield Generates → Harvest → Close → Draw     │
 │       ↑                                                    ↓     │
@@ -225,7 +225,7 @@ Management Action Rewards:
 
 ---
 
-## 🎊 Why HyperPool Rocks!
+## 🎊 Why HyperPools Rocks!
 
 ### ✨ **For Players**
 - 🛡️ **No Loss**: Your money is always safe
@@ -288,14 +288,14 @@ Management Action Rewards:
 
 ### 🚀 **Getting Started is Easy!**
 
-1. **Visit**: [HyperPool.xyz](https://hyperpool.xyz)
+1. **Visit**: [HyperPools.xyz](https://HyperPools.xyz)
 2. **Connect**: Your wallet (MetaMask recommended)
 3. **Deposit**: wHYPE tokens (we'll auto-wrap HYPE!)
 4. **Wait**: For the magic to happen
 5. **Win**: Or withdraw anytime!
 
 ### 💬 **Join Our Community**
-- 🐦 Twitter: [@hyperpool](https://twitter.com/hyperpool)
+- 🐦 Twitter: [@HyperPools](https://twitter.com/HyperPools)
 - 💬 Discord: [Coming Soon]
 - 📖 Docs: You're reading them!
 
@@ -303,7 +303,7 @@ Management Action Rewards:
 
 ## 🎪 Final Words
 
-HyperPool isn't just another DeFi protocol - it's a **new way to think about risk and reward**. We've created a system where:
+HyperPools isn't just another DeFi protocol - it's a **new way to think about risk and reward**. We've created a system where:
 
 - 🛡️ **Your money stays safe**
 - 🎯 **Everyone has fair chances** 
@@ -408,4 +408,4 @@ Mainnet Simulation ✅
 
 ---
 
-*Now you're ready to dive deep into HyperPool! Whether you're a player, developer, or just curious - welcome to the no-loss revolution! 🎊*
+*Now you're ready to dive deep into HyperPools! Whether you're a player, developer, or just curious - welcome to the no-loss revolution! 🎊*

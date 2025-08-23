@@ -312,7 +312,7 @@ export default function V2Page() {
               <div className="flex items-center space-x-3">
                 <HyperPoolLogo size={36} />
                 <h1 className="text-2xl font-bold text-primary">
-                  HyperPool
+                  HyperPools
                 </h1>
               </div>
               <span className="text-sm text-muted-foreground bg-secondary px-3 py-1 rounded-full">
