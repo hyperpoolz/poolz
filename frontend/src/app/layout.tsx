@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,14 +16,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "HyperPools - No-Loss Lottery on Hyperliquid",
-  description: "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid where you deposit wHYPE, earn yield, and get tickets for a chance to win the prize every round.",
-  keywords: "hyperliquid, lottery, no-loss, defi, yield, wHYPE, blockchain, ethereum, hyperEVM",
+  description:
+    "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid where you deposit wHYPE, earn yield, and get tickets for a chance to win the prize every round.",
+  keywords:
+    "hyperliquid, lottery, no-loss, defi, yield, wHYPE, blockchain, ethereum, hyperEVM",
   authors: [{ name: "HyperPools Team" }],
   creator: "HyperPools",
   publisher: "HyperPools",
   openGraph: {
     title: "HyperPools - No-Loss Lottery on Hyperliquid",
-    description: "Win with your yield, never lose your deposit. Deposit wHYPE and get tickets for a chance to win accumulated yield.",
+    description:
+      "Win with your yield, never lose your deposit. Deposit wHYPE and get tickets for a chance to win accumulated yield.",
     url: "https://HyperPools.xyz",
     siteName: "HyperPools",
     type: "website",
@@ -39,7 +43,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "HyperPools - No-Loss Lottery on Hyperliquid",
-    description: "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid.",
+    description:
+      "Win with your yield, never lose your deposit. A no-loss lottery on Hyperliquid.",
     creator: "@HyperPools",
     images: ["/og-image.svg"],
   },
@@ -69,8 +74,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
